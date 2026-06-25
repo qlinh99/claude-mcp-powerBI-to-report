@@ -1,0 +1,43 @@
+{
+  "name": "mcp-powerbi",
+  "version": "0.1.0",
+  "description": "Claude-compatible MCP companion for Microsoft Power BI Modeling MCP with Fabric workspace and semantic model catalog discovery.",
+  "type": "module",
+  "bin": {
+    "mcp-powerbi": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/server.ts",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyenanhducdeveloper86/mcp-powerBI.git"
+  },
+  "keywords": [
+    "mcp",
+    "powerbi",
+    "fabric",
+    "semantic-model",
+    "claude",
+    "powerbi-modeling-mcp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/nguyenanhducdeveloper86/mcp-powerBI/issues"
+  },
+  "homepage": "https://github.com/nguyenanhducdeveloper86/mcp-powerBI#readme",
+  "dependencies": {
+    "@microsoft/powerbi-modeling-mcp": "^0.5.0-beta.10",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
