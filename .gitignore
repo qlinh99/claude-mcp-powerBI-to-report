@@ -4,3 +4,5 @@ dist/
 .DS_Store
 *.log
 .powerbi-token-cache.json
+powerbi-report-output/
+powerbi-dashboard-output/

@@ -1,11 +1,11 @@
 {
-  "name": "mcp-powerbi",
+  "name": "mcp-powerbi-to-report",
   "version": "0.1.0",
-  "description": "Claude-compatible MCP companion for Microsoft Power BI Modeling MCP with Fabric workspace and semantic model catalog discovery.",
+  "description": "Claude-compatible MCP companion for Microsoft Power BI Modeling MCP with Fabric catalog discovery and HTML executive report output.",
   "type": "module",
   "bin": {
-    "mcp-powerbi": "./dist/server.js",
-    "mcp-powerbi-setup": "./dist/setup.js"
+    "mcp-powerbi-to-report": "./dist/server.js",
+    "mcp-powerbi-to-report-setup": "./dist/setup.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -16,11 +16,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nguyenanhducdeveloper86/mcp-powerBI.git"
+    "url": "git+https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git"
   },
   "keywords": [
     "mcp",
     "powerbi",
+    "report",
+    "dashboard",
     "fabric",
     "semantic-model",
     "claude",
@@ -29,9 +31,9 @@
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/nguyenanhducdeveloper86/mcp-powerBI/issues"
+    "url": "https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/issues"
   },
-  "homepage": "https://github.com/nguyenanhducdeveloper86/mcp-powerBI#readme",
+  "homepage": "https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report#readme",
   "dependencies": {
     "@microsoft/powerbi-modeling-mcp": "^0.5.0-beta.10",
     "@modelcontextprotocol/sdk": "^1.29.0",

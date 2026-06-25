@@ -1,6 +1,6 @@
-# mcp-powerBI
+# mcp-powerBI-to-report
 
-Claude-compatible MCP server for discovering Fabric/Power BI workspaces and semantic models.
+Claude-compatible MCP server for discovering Fabric/Power BI workspaces, querying semantic models, and returning executive answers as both text and self-contained HTML reports.
 
 This repo is intentionally based around Microsoft's official [`powerbi-modeling-mcp`](https://github.com/microsoft/powerbi-modeling-mcp):
 
@@ -20,6 +20,8 @@ That split is necessary because Microsoft Power BI Modeling MCP can connect and 
 - `list_semantic_models_in_workspace_via_modeling_mcp`
 - `get_known_workspace_catalog`
 - `execute_dax_query`
+- `execute_dax_report_query`
+- `execute_dax_dashboard_query` compatibility alias
 
 ## Install
 
@@ -39,6 +41,7 @@ npm run build
 - Known workspace names
 - Default CEO workspace
 - Optional default semantic model fallback
+- Optional HTML report output folder
 
 It writes a local `.env` file with mode `0600`. The MCP server loads this file automatically on start.
 
@@ -57,15 +60,16 @@ Generic service-principal config:
 ```json
 {
   "mcpServers": {
-    "mcp-powerbi": {
+    "mcp-powerBI-to-report": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-powerBI/dist/server.js"],
+      "args": ["/absolute/path/to/mcp-powerBI-to-report/dist/server.js"],
       "env": {
         "POWERBI_TENANT": "vnu.edu.vn",
         "POWERBI_CLIENT_ID": "<app-client-id>",
         "POWERBI_CLIENT_SECRET": "<client-secret-value>",
         "POWERBI_MODELING_MCP_COMMAND": "/absolute/path/to/powerbi-modeling-mcp",
-        "POWERBI_MODELING_MCP_ARGS": "--start"
+        "POWERBI_MODELING_MCP_ARGS": "--start",
+        "POWERBI_REPORT_OUTPUT_DIR": "/absolute/path/to/powerbi-report-output"
       }
     }
   }
@@ -77,9 +81,9 @@ For local development:
 ```json
 {
   "mcpServers": {
-    "mcp-powerbi": {
+    "mcp-powerBI-to-report": {
       "command": "npx",
-      "args": ["tsx", "/absolute/path/to/mcp-powerBI/src/server.ts"]
+      "args": ["tsx", "/absolute/path/to/mcp-powerBI-to-report/src/server.ts"]
     }
   }
 }
@@ -107,13 +111,13 @@ Power BI tenant/admin requirements:
 Ask Claude:
 
 ```text
-Use mcp-powerbi to get the full catalog of workspaces and semantic models.
+Use mcp-powerBI-to-report to get the full catalog of workspaces and semantic models.
 ```
 
 or:
 
 ```text
-Use mcp-powerbi to list semantic models in workspace test-mcp via Microsoft Modeling MCP.
+Use mcp-powerBI-to-report to list semantic models in workspace test-mcp via Microsoft Modeling MCP.
 ```
 
 The second path works when the workspace name is already known and Microsoft `powerbi-modeling-mcp` can authenticate to XMLA.
@@ -126,9 +130,20 @@ POWERBI_KNOWN_WORKSPACES=test-mcp
 POWERBI_DEFAULT_WORKSPACE=test-mcp
 # Optional fallback only. Prefer letting Claude choose from workspace schema.
 # POWERBI_DEFAULT_SEMANTIC_MODEL=hospital
+# Optional folder for generated HTML reports.
+# POWERBI_REPORT_OUTPUT_DIR=/Users/ducna/powerbi-report-output
 ```
 
-Then Claude can use `get_known_workspace_catalog` to list models from configured workspaces without REST auth, choose the relevant semantic model from schema/context, and call `execute_dax_query` for follow-up business questions. The wrapper keeps the Microsoft Modeling MCP process alive, so repeated questions reuse the same process and should reduce repeated login prompts.
+Then Claude can use `get_known_workspace_catalog` to list models from configured workspaces without REST auth, choose the relevant semantic model from schema/context, and call `execute_dax_report_query` for follow-up business questions. The wrapper keeps the Microsoft Modeling MCP process alive, so repeated questions reuse the same process and should reduce repeated login prompts.
+
+`execute_dax_report_query` returns:
+
+- concise text summary for chat
+- `structuredContent` with rows, columns, and generated HTML
+- embedded MCP `text/html` resource
+- `reportPath` and `reportUri` for opening the generated local `.html` file
+
+Use `execute_dax_query` only when raw query output is enough.
 
 ## CEO Operating Mode
 
@@ -139,9 +154,28 @@ For the simplest CEO experience:
 - Configure `POWERBI_DEFAULT_WORKSPACE` and `POWERBI_DEFAULT_SEMANTIC_MODEL`.
 - Configure `POWERBI_KNOWN_WORKSPACES` and `POWERBI_DEFAULT_WORKSPACE`.
 - Treat `POWERBI_DEFAULT_SEMANTIC_MODEL` as an optional fallback, not a required CEO input.
-- Ask business questions in plain language; Claude should generate DAX and call `execute_dax_query`.
+- Ask business questions in plain language; Claude should generate DAX and call `execute_dax_report_query`.
 
 The first query in a fresh session can still trigger Microsoft authentication. Follow-up queries in the same running MCP session reuse the existing Microsoft Modeling MCP process and connection.
+
+## HTML Report Output
+
+Reports are generated as standalone HTML files with:
+
+- KPI cards for numeric measures
+- ranked horizontal bar chart for the first text dimension and first numeric metric
+- data table for returned rows
+- question, workspace, semantic model, and DAX query context
+
+Files are written to `POWERBI_REPORT_OUTPUT_DIR` when set, then `POWERBI_DASHBOARD_OUTPUT_DIR` for compatibility, otherwise `./powerbi-report-output` from the MCP process working directory.
+
+The companion Power BI design reference repo is expected at:
+
+```text
+/Users/ducna/Power-BI-Design-Files
+```
+
+It is not vendored into this repo because it contains large `.pbix` and media files. Use it as visual inspiration while keeping this MCP package focused on generating lightweight HTML reports.
 
 ## Environment
 

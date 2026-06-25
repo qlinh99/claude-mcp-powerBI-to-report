@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { AuthManager } from "./auth.js";
+import { buildDashboardResponse } from "./dashboard.js";
 import { loadEnvFile } from "./env.js";
 import { ModelingMcpBridge } from "./modelingMcpBridge.js";
 import { PowerBiClient } from "./powerbiClient.js";
@@ -14,7 +15,7 @@ const powerbi = new PowerBiClient(auth);
 const modelingBridge = new ModelingMcpBridge();
 
 const server = new McpServer({
-  name: "mcp-powerbi",
+  name: "mcp-powerBI-to-report",
   version: "0.1.0"
 });
 
@@ -166,6 +167,137 @@ server.registerTool(
     });
   }
 );
+
+server.registerTool(
+  "execute_dax_report_query",
+  {
+    title: "Execute DAX query and build HTML executive report",
+    description: "Execute a DAX query against a Power BI semantic model and return both a concise text answer and a self-contained HTML dashboard/report for executive review. Prefer this tool for boss/CEO business questions.",
+    inputSchema: {
+      question: z.string().describe("The business question from the executive user."),
+      query: z.string().describe("DAX query text, for example EVALUATE ROW(\"Revenue\", SUM(Visits[TreatmentCost]))."),
+      title: z.string().optional().describe("Optional report title. Defaults to the question."),
+      workspaceName: z.string().optional().describe("Power BI workspace name. Defaults to POWERBI_DEFAULT_WORKSPACE."),
+      semanticModelName: z.string().optional().describe("Semantic model name. Defaults to POWERBI_DEFAULT_SEMANTIC_MODEL."),
+      maxRows: z.number().int().positive().optional().default(100),
+      timeoutSeconds: z.number().int().positive().optional().default(120)
+    }
+  },
+  async ({ question, query, title, workspaceName, semanticModelName, maxRows, timeoutSeconds }) => {
+    return reportResult({
+      question,
+      query,
+      title,
+      workspaceName,
+      semanticModelName,
+      maxRows,
+      timeoutSeconds
+    });
+  }
+);
+
+server.registerTool(
+  "execute_dax_dashboard_query",
+  {
+    title: "Execute DAX query and build HTML dashboard",
+    description: "Alias for execute_dax_report_query kept for compatibility with earlier dashboard workflows.",
+    inputSchema: {
+      question: z.string().describe("The business question from the executive user."),
+      query: z.string().describe("DAX query text, for example EVALUATE ROW(\"Revenue\", SUM(Visits[TreatmentCost]))."),
+      title: z.string().optional().describe("Optional dashboard title. Defaults to the question."),
+      workspaceName: z.string().optional().describe("Power BI workspace name. Defaults to POWERBI_DEFAULT_WORKSPACE."),
+      semanticModelName: z.string().optional().describe("Semantic model name. Defaults to POWERBI_DEFAULT_SEMANTIC_MODEL."),
+      maxRows: z.number().int().positive().optional().default(100),
+      timeoutSeconds: z.number().int().positive().optional().default(120)
+    }
+  },
+  async ({ question, query, title, workspaceName, semanticModelName, maxRows, timeoutSeconds }) => {
+    return reportResult({
+      question,
+      query,
+      title,
+      workspaceName,
+      semanticModelName,
+      maxRows,
+      timeoutSeconds
+    });
+  }
+);
+
+async function reportResult(options: {
+  question: string;
+  query: string;
+  title?: string;
+  workspaceName?: string;
+  semanticModelName?: string;
+  maxRows?: number;
+  timeoutSeconds?: number;
+}) {
+  const workspace = options.workspaceName || process.env.POWERBI_DEFAULT_WORKSPACE;
+  const model = options.semanticModelName || process.env.POWERBI_DEFAULT_SEMANTIC_MODEL;
+  if (!workspace || !model) {
+    throw new Error("Missing workspace/model. Set POWERBI_DEFAULT_WORKSPACE and POWERBI_DEFAULT_SEMANTIC_MODEL, or pass workspaceName and semanticModelName.");
+  }
+
+  const result = await modelingBridge.executeDaxQuery({
+    workspaceName: workspace,
+    semanticModelName: model,
+    query: options.query,
+    maxRows: options.maxRows,
+    timeoutSeconds: options.timeoutSeconds
+  });
+  const dashboard = await buildDashboardResponse({
+    question: options.question,
+    title: options.title,
+    workspaceName: workspace,
+    semanticModelName: model,
+    query: options.query,
+    result
+  });
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify({
+          source: "microsoft-powerbi-modeling-mcp",
+          workspaceName: workspace,
+          semanticModelName: model,
+          question: options.question,
+          summary: dashboard.summary,
+          reportPath: dashboard.dashboardPath,
+          reportUri: dashboard.dashboardUri,
+          generatedAt: dashboard.generatedAt,
+          columns: dashboard.columns,
+          rowCount: dashboard.rows.length
+        }, null, 2)
+      },
+      {
+        type: "resource" as const,
+        resource: {
+          uri: dashboard.dashboardUri,
+          mimeType: "text/html",
+          text: dashboard.html
+        }
+      }
+    ],
+    structuredContent: {
+      source: "microsoft-powerbi-modeling-mcp",
+      workspaceName: workspace,
+      semanticModelName: model,
+      question: options.question,
+      summary: dashboard.summary,
+      reportPath: dashboard.dashboardPath,
+      reportUri: dashboard.dashboardUri,
+      dashboardPath: dashboard.dashboardPath,
+      dashboardUri: dashboard.dashboardUri,
+      generatedAt: dashboard.generatedAt,
+      columns: dashboard.columns,
+      rows: dashboard.rows,
+      html: dashboard.html
+    }
+  };
+}
 
 function jsonResult(value: unknown) {
   return {
