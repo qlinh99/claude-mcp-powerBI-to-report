@@ -18,6 +18,7 @@ That split is necessary because Microsoft Power BI Modeling MCP can connect and 
 - `list_semantic_models`
 - `get_catalog`
 - `list_semantic_models_in_workspace_via_modeling_mcp`
+- `get_known_workspace_catalog`
 - `execute_dax_query`
 
 ## Install
@@ -35,7 +36,9 @@ npm run build
 - Application client ID
 - Client secret value
 - Microsoft `powerbi-modeling-mcp` command and args
-- Default CEO workspace and semantic model
+- Known workspace names
+- Default CEO workspace
+- Optional default semantic model fallback
 
 It writes a local `.env` file with mode `0600`. The MCP server loads this file automatically on start.
 
@@ -119,11 +122,13 @@ If the workspace/model is not provided, Claude should call `get_catalog` first. 
 For a CEO workflow, set:
 
 ```env
+POWERBI_KNOWN_WORKSPACES=test-mcp
 POWERBI_DEFAULT_WORKSPACE=test-mcp
-POWERBI_DEFAULT_SEMANTIC_MODEL=hospital
+# Optional fallback only. Prefer letting Claude choose from workspace schema.
+# POWERBI_DEFAULT_SEMANTIC_MODEL=hospital
 ```
 
-Then Claude can use `execute_dax_query` directly for follow-up business questions without asking for workspace/model every time. The wrapper keeps the Microsoft Modeling MCP process alive, so repeated questions reuse the same process and should reduce repeated login prompts.
+Then Claude can use `get_known_workspace_catalog` to list models from configured workspaces without REST auth, choose the relevant semantic model from schema/context, and call `execute_dax_query` for follow-up business questions. The wrapper keeps the Microsoft Modeling MCP process alive, so repeated questions reuse the same process and should reduce repeated login prompts.
 
 ## CEO Operating Mode
 
@@ -132,6 +137,8 @@ For the simplest CEO experience:
 - Keep Claude Desktop and this MCP server running during the working session.
 - Avoid restarting Claude between related questions.
 - Configure `POWERBI_DEFAULT_WORKSPACE` and `POWERBI_DEFAULT_SEMANTIC_MODEL`.
+- Configure `POWERBI_KNOWN_WORKSPACES` and `POWERBI_DEFAULT_WORKSPACE`.
+- Treat `POWERBI_DEFAULT_SEMANTIC_MODEL` as an optional fallback, not a required CEO input.
 - Ask business questions in plain language; Claude should generate DAX and call `execute_dax_query`.
 
 The first query in a fresh session can still trigger Microsoft authentication. Follow-up queries in the same running MCP session reuse the existing Microsoft Modeling MCP process and connection.

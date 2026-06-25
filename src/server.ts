@@ -103,6 +103,36 @@ server.registerTool(
 );
 
 server.registerTool(
+  "get_known_workspace_catalog",
+  {
+    title: "Get known workspace semantic model catalog",
+    description: "List semantic models for manually configured POWERBI_KNOWN_WORKSPACES using Microsoft Modeling MCP. Use this for CEO workflows when REST workspace discovery is unavailable.",
+    inputSchema: {
+      workspaceNames: z.array(z.string()).optional().describe("Optional workspace names. Defaults to POWERBI_KNOWN_WORKSPACES, then POWERBI_DEFAULT_WORKSPACE.")
+    }
+  },
+  async ({ workspaceNames }) => {
+    const names = uniqueNonEmpty(workspaceNames?.length ? workspaceNames : configuredWorkspaces());
+    if (names.length === 0) {
+      throw new Error("No known workspaces configured. Set POWERBI_KNOWN_WORKSPACES or POWERBI_DEFAULT_WORKSPACE.");
+    }
+
+    const workspaces = [];
+    for (const workspaceName of names) {
+      workspaces.push({
+        name: workspaceName,
+        semanticModels: await modelingBridge.listSemanticModelsInWorkspace(workspaceName)
+      });
+    }
+
+    return jsonResult({
+      source: "microsoft-powerbi-modeling-mcp",
+      workspaces
+    });
+  }
+);
+
+server.registerTool(
   "execute_dax_query",
   {
     title: "Execute DAX query with CEO defaults",
@@ -157,3 +187,14 @@ main().catch(error => {
   console.error(error);
   process.exit(1);
 });
+
+function configuredWorkspaces(): string[] {
+  return [
+    ...(process.env.POWERBI_KNOWN_WORKSPACES || "").split(","),
+    process.env.POWERBI_DEFAULT_WORKSPACE || ""
+  ];
+}
+
+function uniqueNonEmpty(values: string[]): string[] {
+  return [...new Set(values.map(value => value.trim()).filter(Boolean))];
+}
