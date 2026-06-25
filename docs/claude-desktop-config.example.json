@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "mcp-powerbi": {
+      "command": "node",
+      "args": ["/Users/ducna/mcp-powerBI/dist/server.js"],
+      "env": {
+        "POWERBI_TENANT": "vnu.edu.vn",
+        "POWERBI_CLIENT_ID": "<azure-app-client-id>",
+        "POWERBI_CLIENT_SECRET": "<azure-app-client-secret>",
+        "POWERBI_MODELING_MCP_COMMAND": "/Users/ducna/.codex/mcp/powerbi-modeling-mcp/node_modules/@microsoft/powerbi-modeling-mcp-darwin-arm64/dist/powerbi-modeling-mcp",
+        "POWERBI_MODELING_MCP_ARGS": "--start"
+      }
+    }
+  }
+}

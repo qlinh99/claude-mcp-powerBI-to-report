@@ -48,7 +48,7 @@ server.registerTool(
   "list_workspaces",
   {
     title: "List Power BI/Fabric workspaces",
-    description: "List all Fabric/Power BI workspaces visible to the authenticated account through the Power BI REST API.",
+    description: "List all Fabric/Power BI workspaces visible to the authenticated account through the Power BI REST API. Use this first when the user does not provide a workspace name or id.",
     inputSchema: {
       includeMyWorkspace: z.boolean().optional().default(true).describe("Include the personal 'My workspace' pseudo-workspace.")
     }
@@ -60,7 +60,7 @@ server.registerTool(
   "list_semantic_models",
   {
     title: "List semantic models",
-    description: "List semantic models in My workspace or in a specific workspace by id. Use list_workspaces first to resolve workspace ids.",
+    description: "List semantic models in My workspace or in a specific workspace by id. Use list_workspaces first to resolve workspace ids. If workspace discovery is not authenticated and the user did not name a workspace, ask the user which workspace to use.",
     inputSchema: {
       workspaceId: z.string().optional().describe("Workspace/group id. Omit for My workspace.")
     }
@@ -72,7 +72,7 @@ server.registerTool(
   "get_catalog",
   {
     title: "Get workspace and semantic model catalog",
-    description: "Return all visible workspaces and semantic models via Power BI REST API.",
+    description: "Return all visible workspaces and semantic models via Power BI REST API. This is the preferred tool for open-ended questions such as 'which model should I use?' or 'what workspaces can I access?'.",
     inputSchema: {
       includeMyWorkspace: z.boolean().optional().default(true).describe("Include My workspace datasets.")
     }
@@ -84,7 +84,7 @@ server.registerTool(
   "list_semantic_models_in_workspace_via_modeling_mcp",
   {
     title: "List semantic models in known workspace via Microsoft Modeling MCP",
-    description: "Use Microsoft powerbi-modeling-mcp/XMLA auth to list semantic models inside a known workspace name. This is a fallback when REST workspace discovery auth is unavailable.",
+    description: "Use Microsoft powerbi-modeling-mcp/XMLA auth to list semantic models inside a known workspace name. This is a fallback when REST workspace discovery auth is unavailable. The workspace name must be explicit; if it is missing, ask the user instead of guessing.",
     inputSchema: {
       workspaceName: z.string().describe("Exact Fabric/Power BI workspace name, for example 'test-mcp'.")
     }

@@ -28,7 +28,15 @@ npm run build
 
 ## Claude Desktop config
 
-Use the built JS after `npm run build`:
+Use the built JS after `npm run build`.
+
+For this machine, start from [`docs/claude-desktop-config.example.json`](docs/claude-desktop-config.example.json). It points the wrapper to the already installed Microsoft native binary:
+
+```text
+/Users/ducna/.codex/mcp/powerbi-modeling-mcp/node_modules/@microsoft/powerbi-modeling-mcp-darwin-arm64/dist/powerbi-modeling-mcp
+```
+
+Generic service-principal config:
 
 ```json
 {
@@ -39,7 +47,9 @@ Use the built JS after `npm run build`:
       "env": {
         "POWERBI_TENANT": "vnu.edu.vn",
         "POWERBI_CLIENT_ID": "<app-client-id>",
-        "POWERBI_CLIENT_SECRET": "<client-secret-value>"
+        "POWERBI_CLIENT_SECRET": "<client-secret-value>",
+        "POWERBI_MODELING_MCP_COMMAND": "/absolute/path/to/powerbi-modeling-mcp",
+        "POWERBI_MODELING_MCP_ARGS": "--start"
       }
     }
   }
@@ -90,6 +100,7 @@ Use mcp-powerbi to list semantic models in workspace test-mcp via Microsoft Mode
 ```
 
 The second path works when the workspace name is already known and Microsoft `powerbi-modeling-mcp` can authenticate to XMLA.
+If the workspace/model is not provided, Claude should call `get_catalog` first. If REST authentication is unavailable, Claude should ask the user for the workspace name instead of guessing.
 
 ## Environment
 
@@ -113,3 +124,4 @@ npm run dev
 - `list_workspaces` uses `GET https://api.powerbi.com/v1.0/myorg/groups`.
 - `list_semantic_models` uses `GET /datasets` for My workspace or `GET /groups/{groupId}/datasets` for a workspace.
 - The Microsoft Modeling MCP bridge uses `npx -y @microsoft/powerbi-modeling-mcp@latest --start` by default. Override with `POWERBI_MODELING_MCP_COMMAND` and `POWERBI_MODELING_MCP_ARGS` if you have a signed local binary.
+- Local verification notes are in [`docs/verification.md`](docs/verification.md).
