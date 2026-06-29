@@ -321,15 +321,19 @@ question
 }
 ```
 
-The report tags rows with `DataSource`, `WorkspaceName`, `SemanticModelName`, and `EvidenceRole`, then renders one executive dashboard with:
+The report tags rows with `DataSource`, `WorkspaceName`, `SemanticModelName`, and `EvidenceRole`. For audit compatibility, combined rows remain in `structuredContent.rows`, but the HTML report does **not** force all semantic models into one chart. It keeps each query result as a separate dataset, profiles the returned shape, and renders dataset-specific evidence blocks:
 
 - data sources and evidence quality
 - join grain, join keys, and confidence
 - validation warnings when semantic models are at different grains
-- executive insight cards
-- contribution, cross-dimension pockets, risk watch, and next questions
+- dataset profiles with detected grain, metrics, dimensions, and visual shape
+- time-series blocks for time-grain datasets
+- ranking/contribution blocks for categorical datasets
+- cross-dimension pocket blocks when multiple dimensions are returned
+- metric scorecards or evidence tables when the query is too shallow for stronger visuals
+- an executive synthesis board showing what each semantic model can prove, what decision it supports, and what evidence is still missing
 
-Important rule: if semantic models do not share the requested grain, the report should describe cross-source findings as directional correlation, not proven causality.
+Important rule: if semantic models do not share the requested grain, the report should stay in `source-separated evidence` mode and describe cross-source findings as directional correlation, not proven causality. To compare or join models directly, the agent must aggregate each DAX query to the same `joinKeys` first, for example `Month x Province x Model`.
 
 ### Revenue month extremes
 
@@ -386,10 +390,11 @@ Reports are generated as standalone HTML files with:
 - contribution analysis across detected dimensions
 - cross-dimension pockets such as `Province x Model`, `Region x Model`, or any dimension pair returned by the query
 - risk/opportunity watch based on returned operational drivers such as margin, discount, inventory, marketing, and market share
+- multi-semantic dataset blocks that choose chart/layout from the returned data shape instead of a fixed template
 - next-best business questions for CEO drill-down
 - question, workspace, semantic model, and DAX query context
 
-Raw returned rows remain available in MCP `structuredContent.rows` for audit/debug, but the HTML report is designed as a decision brief rather than a raw data table.
+Raw returned rows remain available in MCP `structuredContent.rows` for audit/debug. Multi-semantic runs also expose `structuredContent.datasets` and `structuredContent.datasetProfiles` so agents can inspect why a specific dashboard block was chosen. The HTML report is designed as a decision brief rather than a raw data table.
 
 Files are written to `POWERBI_REPORT_OUTPUT_DIR` when set, then `POWERBI_DASHBOARD_OUTPUT_DIR` for compatibility, otherwise `./powerbi-report-output` from the MCP process working directory.
 

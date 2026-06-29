@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { profileDataset } from "./datasetProfiler.js";
 
 // ═══════════════════════════════════════════════════════
 // Types
@@ -30,23 +31,32 @@ interface ReportIntent {
 export async function buildDashboardResponse(request) {
   const generatedAt = new Date().toISOString();
   const table = normalizeDaxResult(request.result);
+  const datasets = normalizeReportDatasets(request, table);
+  const datasetProfiles = datasets.map(dataset => profileDataset(dataset));
+  const multiDatasetMode = datasetProfiles.length > 1;
   const intent = detectReportIntent(request.question, table.rows, table.columns);
 
   // Month-extremes needs the existing deep analysis object
-  const monthlyRows = intent.mode === "month-extremes"
+  const monthlyRows = !multiDatasetMode && intent.mode === "month-extremes"
     ? selectMonthlyRows(table.rows)
     : table.rows;
-  const analysis = intent.mode === "month-extremes"
+  const analysis = !multiDatasetMode && intent.mode === "month-extremes"
     ? analyzeRevenueMonthExtremes(request.question, monthlyRows, table.columns)
     : undefined;
 
-  const business = buildBusinessInsightModel(intent, analysis, table.rows, table.columns);
-  const insights = buildInsights(intent, analysis, table.rows, table.columns, business);
-  const summary  = buildSummary(intent, table.rows, table.columns, analysis);
+  const business = multiDatasetMode ? undefined : buildBusinessInsightModel(intent, analysis, table.rows, table.columns);
+  const insights = multiDatasetMode
+    ? buildDatasetAwareInsights(datasetProfiles)
+    : buildInsights(intent, analysis, table.rows, table.columns, business);
+  const summary  = multiDatasetMode
+    ? buildDatasetAwareSummary(datasetProfiles, request.joinPlan)
+    : buildSummary(intent, table.rows, table.columns, analysis);
   const html     = renderDashboardHtml({
     ...request,
     rows: table.rows,
     columns: table.columns,
+    datasets,
+    datasetProfiles,
     summary,
     insights,
     business,
@@ -62,16 +72,115 @@ export async function buildDashboardResponse(request) {
     dashboardPath,
     dashboardUri: `file://${dashboardPath}`,
     html,
-    insightCards: business.insightCards,
-    dataProfile: business.dataProfile,
-    nextQuestions: business.nextQuestions,
+    insightCards: business?.insightCards ?? insights,
+    dataProfile: business?.dataProfile ?? {
+      rowCount: table.rows.length,
+      columnCount: table.columns.length,
+      datasetCount: datasetProfiles.length,
+      datasetProfiles
+    },
+    nextQuestions: business?.nextQuestions ?? buildDatasetAwareNextQuestions(datasetProfiles),
     dataSources: request.dataSources ?? [],
     joinPlan: request.joinPlan,
     validationWarnings: request.validationWarnings ?? [],
+    datasets,
+    datasetProfiles,
     rows: table.rows,
     columns: table.columns,
     generatedAt
   };
+}
+
+function normalizeReportDatasets(request, fallbackTable) {
+  if (Array.isArray(request.datasets) && request.datasets.length) {
+    return request.datasets.map((dataset, index) => {
+      const normalized = normalizeDaxResult({ data: dataset.rows ?? [] });
+      return {
+        id: dataset.id || `dataset-${index + 1}`,
+        label: dataset.label || dataset.semanticModelName || dataset.evidenceRole || `Dataset ${index + 1}`,
+        workspaceName: dataset.workspaceName,
+        semanticModelName: dataset.semanticModelName,
+        evidenceRole: dataset.evidenceRole,
+        evidence: dataset.evidence ?? [],
+        rows: normalized.rows,
+        columns: normalized.columns
+      };
+    });
+  }
+
+  const groupKeyColumns = ["DataSource", "SemanticModelName"].filter(column => fallbackTable.columns.includes(column));
+  if (groupKeyColumns.length && fallbackTable.rows.length) {
+    const groups = new Map();
+    for (const row of fallbackTable.rows) {
+      const key = groupKeyColumns.map(column => String(row[column] ?? "")).filter(Boolean).join(" / ") || "Combined";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    }
+    if (groups.size > 1) {
+      return [...groups.entries()].map(([key, rows], index) => ({
+        id: `dataset-${index + 1}`,
+        label: key,
+        workspaceName: rows[0]?.WorkspaceName,
+        semanticModelName: rows[0]?.SemanticModelName,
+        evidenceRole: rows[0]?.EvidenceRole,
+        evidence: [],
+        rows,
+        columns: unique(rows.flatMap(row => Object.keys(row)))
+      }));
+    }
+  }
+
+  return [{
+    id: "primary",
+    label: request.semanticModelName || "Primary dataset",
+    workspaceName: request.workspaceName,
+    semanticModelName: request.semanticModelName,
+    evidenceRole: "primary",
+    evidence: [],
+    rows: fallbackTable.rows,
+    columns: fallbackTable.columns
+  }];
+}
+
+function buildDatasetAwareSummary(profiles, joinPlan) {
+  const nonEmpty = profiles.filter(profile => profile.rowCount > 0);
+  if (!nonEmpty.length) return "No rows returned from the selected semantic models.";
+  const sourceText = nonEmpty
+    .map(profile => `${profile.label}: ${formatNumber(profile.rowCount)} rows, ${profile.shape}, grain ${profile.grain}`)
+    .join("; ");
+  const joinText = joinPlan?.confidence && joinPlan.confidence !== "single-source"
+    ? ` Cross-source confidence is ${joinPlan.confidence}; grain: ${joinPlan.grain ?? "source-specific evidence"}.`
+    : "";
+  return `Report uses ${formatNumber(nonEmpty.length)} separate evidence sources instead of forcing them into one chart. ${sourceText}.${joinText}`;
+}
+
+function buildDatasetAwareInsights(profiles) {
+  return profiles.slice(0, 6).map(profile => ({
+    title: `${profile.label}: ${profile.shape.replace(/_/g, " ")}`,
+    detail: [
+      `Grain: ${profile.grain}.`,
+      profile.primaryMetric ? `Primary metric: ${profile.primaryMetric}.` : "No numeric metric detected.",
+      profile.primaryDimension ? `Primary dimension: ${profile.primaryDimension}.` : "No strong dimension detected.",
+      `Recommended blocks: ${profile.recommendedBlocks.join(", ")}.`
+    ].join(" ")
+  }));
+}
+
+function buildDatasetAwareNextQuestions(profiles) {
+  const questions = [];
+  const timeProfiles = profiles.filter(profile => profile.timeDimensions?.length && profile.primaryMetric);
+  const pocketProfiles = profiles.filter(profile => profile.categoricalDimensions?.length >= 2 && profile.primaryMetric);
+  if (timeProfiles.length) {
+    questions.push(`Which time periods diverge across ${timeProfiles.map(profile => profile.label).join(" and ")} after aligning to a common grain?`);
+  }
+  if (pocketProfiles.length) {
+    questions.push(`Which ${pocketProfiles[0].categoricalDimensions.slice(0, 2).join(" x ")} pockets explain the largest business movement?`);
+  }
+  if (profiles.length > 1) {
+    questions.push("Which shared join keys should be returned next so the report can move from directional comparison to root-cause evidence?");
+  }
+  questions.push("Which missing driver fields should be added next: plan, margin, inventory, discount, campaign, dealer, or conversion?");
+  return unique(questions).slice(0, 5);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -767,9 +876,179 @@ function renderDataSourceSection(input: any): string {
   </section>`;
 }
 
+function renderDatasetEvidenceSection(input: any): string {
+  const datasets = input.datasets ?? [];
+  const profiles = input.datasetProfiles ?? [];
+  if (!datasets.length || !profiles.length) return "";
+  const joinPlan = input.joinPlan ?? {};
+  const alignmentRead = (joinPlan.joinKeys ?? []).length
+    ? `Common grain requested: ${joinPlan.grain ?? (joinPlan.joinKeys ?? []).join(" x ")}. Cross-source conclusions should use only those keys.`
+    : "No common join keys were supplied, so each semantic model is treated as a separate evidence block. The report should compare patterns, not claim direct causality.";
+
+  return `<section class="analysis-stack">
+    <article class="panel">
+      <h2>Question-driven report framework</h2>
+      <p class="analysis-note">The dashboard format is selected from each dataset's actual shape: time series, ranking, cross-dimension pocket, metric scorecard, or evidence table. This avoids forcing different semantic models into one incorrect visual grain.</p>
+      <div class="driver-tree">
+        <div class="tree-row"><span>Rendering mode</span><strong>Dataset-specific evidence blocks</strong></div>
+        <div class="tree-row"><span>Cross-source alignment</span><strong>${escapeHtml(joinPlan.confidence ?? "directional")}</strong></div>
+        <div class="tree-row"><span>Management read</span><strong>${escapeHtml(alignmentRead)}</strong></div>
+      </div>
+    </article>
+    <section class="dataset-grid">
+      ${profiles.map((profile, index) => renderDatasetBlock(datasets[index], profile)).join("")}
+    </section>
+    ${renderCrossDatasetInsightBoard(datasets, profiles)}
+  </section>`;
+}
+
+function renderDatasetBlock(dataset: any, profile: any): string {
+  const rows = dataset?.rows ?? [];
+  const metric = profile.primaryMetric;
+  const dimension = profile.primaryDimension;
+  const chart = renderDatasetChart(rows, profile);
+  const profileRows = [
+    ["Shape", profile.shape.replace(/_/g, " ")],
+    ["Grain", profile.grain],
+    ["Rows / columns", `${formatNumber(profile.rowCount)} / ${formatNumber(profile.columnCount)}`],
+    ["Metric", metric ?? "not detected"],
+    ["Dimension", dimension ?? "not detected"]
+  ];
+  return `<article class="panel dataset-panel">
+    <div class="dataset-head">
+      <div>
+        <div class="mode-badge">${escapeHtml(profile.evidenceRole ?? "evidence")}</div>
+        <h2>${escapeHtml(profile.label)}</h2>
+      </div>
+      <span>${escapeHtml(profile.workspaceName ?? "")}</span>
+    </div>
+    <p class="analysis-note">${escapeHtml(datasetReadout(profile))}</p>
+    ${chart}
+    <div class="driver-tree" style="margin-top:14px">
+      ${profileRows.map(([label, value]) => `<div class="tree-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
+    </div>
+  </article>`;
+}
+
+function renderDatasetChart(rows: any[], profile: any): string {
+  const metric = profile.primaryMetric;
+  const dimension = profile.primaryDimension;
+  if (!rows.length) return "<p>No rows returned from this semantic model.</p>";
+  if (!metric) return renderEvidenceTable(rows, profile.columns, 8);
+  if (profile.shape === "time_series" && dimension) return renderTrendBars(rows, dimension, metric);
+  if ((profile.shape === "categorical_ranking" || profile.shape === "cross_dimension") && dimension) {
+    return renderGenericBars(aggregateRowsByDimension(rows, dimension, metric), dimension, metric, 10);
+  }
+  if (profile.shape === "multi_metric" || profile.shape === "single_metric") return renderMetricScorecard(rows, profile.metrics);
+  return renderEvidenceTable(rows, profile.columns, 8);
+}
+
+function renderMetricScorecard(rows: any[], metrics: string[]): string {
+  const selected = metrics.slice(0, 6);
+  if (!selected.length) return "<p>No numeric measures available.</p>";
+  return `<div class="mini-cards">${selected.map(metric => {
+    const values = rows.map(row => numericValue(row[metric]));
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const avg = values.length ? total / values.length : 0;
+    return `<div class="mini-card"><span>${escapeHtml(metric)}</span><strong>${escapeHtml(formatMetricValue(metric, total))}</strong><p>Average ${escapeHtml(formatMetricValue(metric, avg))} across ${escapeHtml(formatNumber(rows.length))} rows.</p></div>`;
+  }).join("")}</div>`;
+}
+
+function renderEvidenceTable(rows: any[], columns: string[], limit = 8): string {
+  const visibleColumns = (columns?.length ? columns : unique(rows.flatMap(row => Object.keys(row)))).slice(0, 6);
+  if (!visibleColumns.length) return "<p>No table columns available.</p>";
+  return `<div class="table-wrap"><table><thead><tr>${visibleColumns.map(column => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>
+    ${rows.slice(0, limit).map(row => `<tr>${visibleColumns.map(column => {
+      const value = row[column];
+      const isNumber = typeof value === "number";
+      return `<td class="${isNumber ? "number" : ""}">${escapeHtml(isNumber ? formatMetricValue(column, value) : String(value ?? ""))}</td>`;
+    }).join("")}</tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+function renderCrossDatasetInsightBoard(datasets: any[], profiles: any[]): string {
+  const rows = profiles.map((profile, index) => {
+    const dataset = datasets[index] ?? {};
+    const metric = profile.primaryMetric;
+    const dimension = profile.primaryDimension;
+    const evidence = metric && dimension
+      ? topDatasetEvidence(dataset.rows ?? [], dimension, metric)
+      : metric
+        ? `Total ${metric}: ${formatMetricValue(metric, sumRows(dataset.rows ?? [], metric))}`
+        : "No primary metric detected";
+    const decision = decisionCueForShape(profile);
+    return { source: profile.label, evidence, decision, missing: missingEvidenceForProfile(profile) };
+  });
+  return `<article class="panel">
+    <h2>Executive synthesis board</h2>
+    <p class="analysis-note">This is the management layer: what each semantic model can prove, what decision it supports, and what is still missing before claiming root cause.</p>
+    <div class="table-wrap"><table class="decision-table"><thead><tr><th>Evidence source</th><th>What it proves</th><th>Decision use</th><th>Still missing</th></tr></thead><tbody>
+      ${rows.map(row => `<tr><td>${escapeHtml(row.source)}</td><td>${escapeHtml(row.evidence)}</td><td>${escapeHtml(row.decision)}</td><td>${escapeHtml(row.missing)}</td></tr>`).join("")}
+    </tbody></table></div>
+  </article>`;
+}
+
+function datasetReadout(profile: any): string {
+  if (profile.shape === "time_series") return `Use this block for trend, seasonality, extremes, and run-rate questions at ${profile.grain} grain.`;
+  if (profile.shape === "categorical_ranking") return `Use this block for top/bottom, concentration, and contribution decisions by ${profile.primaryDimension}.`;
+  if (profile.shape === "cross_dimension") return `Use this block to find business pockets across dimensions instead of reading dimensions independently.`;
+  if (profile.shape === "multi_metric") return "Use this block as a driver scorecard; it needs a dimension or time grain for deeper diagnosis.";
+  if (profile.shape === "empty") return "This evidence source returned no rows and should be treated as a data gap.";
+  return "Use this block as supporting evidence; add dimensions or metrics to make it decision-ready.";
+}
+
+function topDatasetEvidence(rows: any[], dimension: string, metric: string): string {
+  const grouped = aggregateRowsByDimension(rows, dimension, metric).sort((a, b) => numericValue(b[metric]) - numericValue(a[metric]));
+  const total = grouped.reduce((sum, row) => sum + numericValue(row[metric]), 0);
+  const top = grouped[0];
+  if (!top) return "No comparable members returned";
+  const value = numericValue(top[metric]);
+  return `${String(top[dimension] ?? "")} leads ${metric} with ${formatMetricValue(metric, value)}${total ? ` (${formatPercent(value / total)})` : ""}.`;
+}
+
+function decisionCueForShape(profile: any): string {
+  if (profile.shape === "time_series") return "Validate whether peak/trough is repeatable, seasonal, or operational before acting.";
+  if (profile.shape === "categorical_ranking") return "Prioritize top contributors, then check margin/risk before scaling.";
+  if (profile.shape === "cross_dimension") return "Drill into the strongest pockets; these are usually where CEO-level actions live.";
+  if (profile.shape === "multi_metric") return "Use as a driver scan; request segmentation to locate where the driver matters.";
+  if (profile.shape === "empty") return "Do not use this source for decisions until the query/model returns data.";
+  return "Use as audit evidence, not the main decision layer.";
+}
+
+function missingEvidenceForProfile(profile: any): string {
+  const missing = [];
+  if (!profile.timeDimensions?.length) missing.push("time grain");
+  if (!profile.categoricalDimensions?.length) missing.push("business dimension");
+  if ((profile.metrics ?? []).length < 2) missing.push("secondary driver metric");
+  return missing.length ? missing.join(", ") : "root-cause fields such as plan, margin, inventory, discount, campaign";
+}
+
+function aggregateRowsByDimension(rows: any[], dimension: string, metric: string): any[] {
+  const groups = new Map();
+  for (const row of rows) {
+    const label = String(row[dimension] ?? "").trim();
+    if (!label) continue;
+    groups.set(label, (groups.get(label) ?? 0) + numericValue(row[metric]));
+  }
+  return [...groups.entries()].map(([label, value]) => ({ [dimension]: label, [metric]: value }));
+}
+
 // ═══════════════════════════════════════════════════════
 // KPI cards (mode-aware)
 // ═══════════════════════════════════════════════════════
+
+function buildDatasetKpis(profiles: any[]) {
+  const totalRows = profiles.reduce((sum, profile) => sum + (profile.rowCount ?? 0), 0);
+  const joined = profiles.filter(profile => profile.rowCount > 0);
+  const shapes = unique(profiles.map(profile => profile.shape).filter(Boolean));
+  const grains = unique(profiles.map(profile => profile.grain).filter(Boolean));
+  return [
+    { label: "Evidence sources", value: formatNumber(profiles.length), tone: "blue" },
+    { label: "Rows returned", value: formatNumber(totalRows), tone: "green" },
+    { label: "Visual shapes", value: shapes.slice(0, 2).join(", ") || "n/a", tone: "amber" },
+    { label: "Grains detected", value: grains.length === 1 ? grains[0] : `${formatNumber(grains.length)} separate grains`, tone: joined.length === profiles.length ? "blue" : "red" }
+  ];
+}
 
 function buildKpis(rows: any[], columns: string[], intent: ReportIntent, analysis: any) {
   if (intent?.mode === "month-extremes" && analysis) {
@@ -815,7 +1094,10 @@ function buildKpis(rows: any[], columns: string[], intent: ReportIntent, analysi
 function renderDashboardHtml(input) {
   const title  = input.title || "Executive Power BI Report";
   const intent: ReportIntent = input.intent;
-  const kpis   = buildKpis(input.rows, input.columns, intent, input.analysis);
+  const multiDatasetMode = (input.datasetProfiles?.length ?? 0) > 1;
+  const kpis   = multiDatasetMode
+    ? buildDatasetKpis(input.datasetProfiles)
+    : buildKpis(input.rows, input.columns, intent, input.analysis);
 
   let modeSection = "";
   let analysisSection = "";
@@ -823,28 +1105,30 @@ function renderDashboardHtml(input) {
   const metric = intent?.primaryMetric;
   const dim    = intent?.primaryDimension;
 
-  switch (intent?.mode) {
-    case "month-extremes":
-      if (input.analysis) {
-        modeSection = renderMonthExtremesSection(input);
-        analysisSection = renderAnalysisTables(input.rows, input.analysis);
-      }
-      chartHtml = renderMonthlyBars(input.rows, input.analysis?.dimension, input.analysis?.metric);
-      break;
-    case "ranking":
-      modeSection = renderRankingSection(input);
-      chartHtml   = renderRankedBars(input.rows, dim, metric, intent.topN);
-      break;
-    case "trend":
-      modeSection = renderTrendSection(input);
-      chartHtml   = renderTrendBars(input.rows, dim, metric);
-      break;
-    case "distribution":
-      modeSection = renderDistributionSection(input);
-      chartHtml   = renderDistributionBars(input.rows, dim, metric);
-      break;
-    default:
-      chartHtml = renderGenericBars(input.rows, dim, metric);
+  if (!multiDatasetMode) {
+    switch (intent?.mode) {
+      case "month-extremes":
+        if (input.analysis) {
+          modeSection = renderMonthExtremesSection(input);
+          analysisSection = renderAnalysisTables(input.rows, input.analysis);
+        }
+        chartHtml = renderMonthlyBars(input.rows, input.analysis?.dimension, input.analysis?.metric);
+        break;
+      case "ranking":
+        modeSection = renderRankingSection(input);
+        chartHtml   = renderRankedBars(input.rows, dim, metric, intent.topN);
+        break;
+      case "trend":
+        modeSection = renderTrendSection(input);
+        chartHtml   = renderTrendBars(input.rows, dim, metric);
+        break;
+      case "distribution":
+        modeSection = renderDistributionSection(input);
+        chartHtml   = renderDistributionBars(input.rows, dim, metric);
+        break;
+      default:
+        chartHtml = renderGenericBars(input.rows, dim, metric);
+    }
   }
 
   const chartTitle = getChartTitle(intent, input.analysis);
@@ -942,6 +1226,11 @@ function renderDashboardHtml(input) {
     .decision-card b { display: block; margin-bottom: 7px; font-size: 14px; }
     .decision-card span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; font-weight: 760; margin-top: 9px; margin-bottom: 3px; }
     .decision-card p { font-size: 12px; line-height: 1.4; margin: 0; }
+    .dataset-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; align-items: start; }
+    .dataset-panel { min-height: 430px; }
+    .dataset-head { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: start; margin-bottom: 8px; }
+    .dataset-head h2 { margin-bottom: 0; overflow-wrap: anywhere; }
+    .dataset-head span { color: var(--muted); font-size: 12px; text-align: right; }
     .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
     table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
@@ -951,7 +1240,7 @@ function renderDashboardHtml(input) {
     .query { margin-top: 14px; padding: 12px; border-radius: 8px; background: #101828; color: #f2f4f7; overflow: auto; font-size: 12px; line-height: 1.45; }
     @media (max-width: 900px) {
       main { padding: 18px; }
-      header, .content, .exec-grid, .analysis-grid { grid-template-columns: 1fr; }
+      header, .content, .exec-grid, .analysis-grid, .dataset-grid { grid-template-columns: 1fr; }
       .meta { text-align: left; }
       .grid, .readout, .mini-cards, .dimension-grid, .heat-grid, .alert-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
     }
@@ -996,18 +1285,20 @@ function renderDashboardHtml(input) {
 
     ${renderDataSourceSection(input)}
 
-    ${renderBusinessInsightSection(input.business)}
+    ${multiDatasetMode ? renderDatasetEvidenceSection(input) : ""}
+
+    ${multiDatasetMode ? "" : renderBusinessInsightSection(input.business)}
 
     ${modeSection}
 
     ${analysisSection}
 
-    <section class="content">
+    ${multiDatasetMode ? "" : `<section class="content">
       <article class="panel">
         <h2>${escapeHtml(chartTitle)}</h2>
         ${chartHtml || "<p>No chart data available.</p>"}
       </article>
-    </section>
+    </section>`}
 
     <section class="panel print-hidden" style="margin-top:18px">
       <h2>Question</h2>

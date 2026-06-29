@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { buildDashboardResponse } from "./dashboard.js";
+import type { ReportDataset } from "./datasetProfiler.js";
 import { loadEnvFile } from "./env.js";
 import { ModelingMcpBridge } from "./modelingMcpBridge.js";
 
@@ -119,11 +120,12 @@ server.registerTool(
       joinKeys: z.array(z.string()).optional().describe("Common grain keys such as Month, Province, Model, Dealer."),
       grain: z.string().optional().describe("Human-readable join grain, for example Month x Province x Model."),
       reportSpec: z.record(z.string(), z.any()).optional().describe("Optional agent-authored ReportSpec used for traceability."),
+      format: z.enum(["text", "html", "both"]).optional().default("both").describe("Output format: 'text' for JSON summary only, 'html' for HTML report only, 'both' for both."),
       maxRows: z.number().int().positive().optional().default(100),
       timeoutSeconds: z.number().int().positive().optional().default(120)
     }
   },
-  async ({ question, title, workspaceName, queries, joinKeys, grain, reportSpec, maxRows, timeoutSeconds }) => {
+  async ({ question, title, workspaceName, queries, joinKeys, grain, reportSpec, format, maxRows, timeoutSeconds }) => {
     return multiSemanticReportResult({
       question,
       title,
@@ -132,6 +134,7 @@ server.registerTool(
       joinKeys,
       grain,
       reportSpec,
+      format,
       maxRows,
       timeoutSeconds
     });
@@ -184,17 +187,19 @@ server.registerTool(
       title: z.string().optional().describe("Optional report title. Defaults to the question."),
       workspaceName: z.string().optional().describe("Power BI workspace name. Defaults to POWERBI_DEFAULT_WORKSPACE."),
       semanticModelName: z.string().optional().describe("Semantic model name. Defaults to POWERBI_DEFAULT_SEMANTIC_MODEL."),
+      format: z.enum(["text", "html", "both"]).optional().default("both").describe("Output format: 'text' for JSON summary only, 'html' for HTML report only, 'both' for both."),
       maxRows: z.number().int().positive().optional().default(100),
       timeoutSeconds: z.number().int().positive().optional().default(120)
     }
   },
-  async ({ question, query, title, workspaceName, semanticModelName, maxRows, timeoutSeconds }) => {
+  async ({ question, query, title, workspaceName, semanticModelName, format, maxRows, timeoutSeconds }) => {
     return reportResult({
       question,
       query,
       title,
       workspaceName,
       semanticModelName,
+      format,
       maxRows,
       timeoutSeconds
     });
@@ -212,17 +217,19 @@ server.registerTool(
       title: z.string().optional().describe("Optional dashboard title. Defaults to the question."),
       workspaceName: z.string().optional().describe("Power BI workspace name. Defaults to POWERBI_DEFAULT_WORKSPACE."),
       semanticModelName: z.string().optional().describe("Semantic model name. Defaults to POWERBI_DEFAULT_SEMANTIC_MODEL."),
+      format: z.enum(["text", "html", "both"]).optional().default("both").describe("Output format: 'text' for JSON summary only, 'html' for HTML report only, 'both' for both."),
       maxRows: z.number().int().positive().optional().default(100),
       timeoutSeconds: z.number().int().positive().optional().default(120)
     }
   },
-  async ({ question, query, title, workspaceName, semanticModelName, maxRows, timeoutSeconds }) => {
+  async ({ question, query, title, workspaceName, semanticModelName, format, maxRows, timeoutSeconds }) => {
     return reportResult({
       question,
       query,
       title,
       workspaceName,
       semanticModelName,
+      format,
       maxRows,
       timeoutSeconds
     });
@@ -235,6 +242,7 @@ async function reportResult(options: {
   title?: string;
   workspaceName?: string;
   semanticModelName?: string;
+  format?: "text" | "html" | "both";
   maxRows?: number;
   timeoutSeconds?: number;
 }) {
@@ -260,52 +268,48 @@ async function reportResult(options: {
     result
   });
 
+  const format = options.format || "both";
+  const textPayload = {
+    source: "microsoft-powerbi-modeling-mcp",
+    workspaceName: workspace,
+    semanticModelName: model,
+    question: options.question,
+    summary: dashboard.summary,
+    insights: dashboard.insights,
+    insightCards: dashboard.insightCards,
+    dataProfile: dashboard.dataProfile,
+    nextQuestions: dashboard.nextQuestions,
+    reportPath: dashboard.dashboardPath,
+    reportUri: dashboard.dashboardUri,
+    generatedAt: dashboard.generatedAt,
+    columns: dashboard.columns,
+    rowCount: dashboard.rows.length
+  };
+  const htmlResource = {
+    type: "resource" as const,
+    resource: {
+      uri: dashboard.dashboardUri,
+      mimeType: "text/html",
+      text: dashboard.html
+    }
+  };
+  const content: Array<
+    | { type: "text"; text: string }
+    | { type: "resource"; resource: { uri: string; mimeType: string; text: string } }
+  > = [];
+  if (format === "text" || format === "both") {
+    content.push({ type: "text" as const, text: JSON.stringify(textPayload, null, 2) });
+  }
+  if (format === "html" || format === "both") {
+    content.push(htmlResource);
+  }
+
   return {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify({
-          source: "microsoft-powerbi-modeling-mcp",
-          workspaceName: workspace,
-          semanticModelName: model,
-          question: options.question,
-          summary: dashboard.summary,
-          insights: dashboard.insights,
-          insightCards: dashboard.insightCards,
-          dataProfile: dashboard.dataProfile,
-          nextQuestions: dashboard.nextQuestions,
-          reportPath: dashboard.dashboardPath,
-          reportUri: dashboard.dashboardUri,
-          generatedAt: dashboard.generatedAt,
-          columns: dashboard.columns,
-          rowCount: dashboard.rows.length
-        }, null, 2)
-      },
-      {
-        type: "resource" as const,
-        resource: {
-          uri: dashboard.dashboardUri,
-          mimeType: "text/html",
-          text: dashboard.html
-        }
-      }
-    ],
+    content,
     structuredContent: {
-      source: "microsoft-powerbi-modeling-mcp",
-      workspaceName: workspace,
-      semanticModelName: model,
-      question: options.question,
-      summary: dashboard.summary,
-      insights: dashboard.insights,
-      insightCards: dashboard.insightCards,
-      dataProfile: dashboard.dataProfile,
-      nextQuestions: dashboard.nextQuestions,
-      reportPath: dashboard.dashboardPath,
-      reportUri: dashboard.dashboardUri,
+      ...textPayload,
       dashboardPath: dashboard.dashboardPath,
       dashboardUri: dashboard.dashboardUri,
-      generatedAt: dashboard.generatedAt,
-      columns: dashboard.columns,
       rows: dashboard.rows,
       html: dashboard.html
     }
@@ -328,11 +332,13 @@ async function multiSemanticReportResult(options: {
   joinKeys?: string[];
   grain?: string;
   reportSpec?: Record<string, unknown>;
+  format?: "text" | "html" | "both";
   maxRows?: number;
   timeoutSeconds?: number;
 }) {
   const defaultWorkspace = options.workspaceName || process.env.POWERBI_DEFAULT_WORKSPACE;
   const combinedRows: Record<string, unknown>[] = [];
+  const datasets: ReportDataset[] = [];
   const dataSources = [];
   const warnings: string[] = [];
 
@@ -351,6 +357,13 @@ async function multiSemanticReportResult(options: {
     const rows = extractRows(result);
     const sourceName = `${workspace}/${querySpec.semanticModelName}`;
     const evidenceRole = querySpec.evidenceRole || inferEvidenceRole(querySpec.semanticModelName, querySpec.evidence);
+    const datasetRows = rows.map(row => ({
+      ...row,
+      DataSource: sourceName,
+      WorkspaceName: workspace,
+      SemanticModelName: querySpec.semanticModelName,
+      EvidenceRole: evidenceRole
+    }));
     for (const row of rows) {
       combinedRows.push({
         ...row,
@@ -360,6 +373,16 @@ async function multiSemanticReportResult(options: {
         EvidenceRole: evidenceRole
       });
     }
+    datasets.push({
+      id: normalizeText(`${querySpec.semanticModelName}-${evidenceRole}`) || `dataset-${datasets.length + 1}`,
+      label: querySpec.semanticModelName,
+      workspaceName: workspace,
+      semanticModelName: querySpec.semanticModelName,
+      evidenceRole,
+      evidence: querySpec.evidence ?? [],
+      rows: datasetRows,
+      columns: uniqueNonEmpty(datasetRows.flatMap(row => Object.keys(row)))
+    });
     dataSources.push({
       workspaceName: workspace,
       semanticModelName: querySpec.semanticModelName,
@@ -387,6 +410,7 @@ async function multiSemanticReportResult(options: {
     semanticModelName: dataSources.map(source => source.semanticModelName).join(" + "),
     query: options.queries.map(query => `-- ${query.semanticModelName}\n${query.query}`).join("\n\n"),
     result: { data: combinedRows },
+    datasets,
     dataSources,
     joinPlan: validation.joinPlan,
     validationWarnings: warnings,
@@ -401,6 +425,7 @@ async function multiSemanticReportResult(options: {
     insights: dashboard.insights,
     insightCards: dashboard.insightCards,
     dataProfile: dashboard.dataProfile,
+    datasetProfiles: dashboard.datasetProfiles,
     nextQuestions: dashboard.nextQuestions,
     dataSources,
     joinPlan: validation.joinPlan,
@@ -413,26 +438,35 @@ async function multiSemanticReportResult(options: {
     rowCount: dashboard.rows.length
   };
 
+  const format = options.format || "both";
+  const htmlResource = {
+    type: "resource" as const,
+    resource: {
+      uri: dashboard.dashboardUri,
+      mimeType: "text/html",
+      text: dashboard.html
+    }
+  };
+  const content: Array<
+    | { type: "text"; text: string }
+    | { type: "resource"; resource: { uri: string; mimeType: string; text: string } }
+  > = [];
+  if (format === "text" || format === "both") {
+    content.push({ type: "text" as const, text: JSON.stringify(payload, null, 2) });
+  }
+  if (format === "html" || format === "both") {
+    content.push(htmlResource);
+  }
+
   return {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify(payload, null, 2)
-      },
-      {
-        type: "resource" as const,
-        resource: {
-          uri: dashboard.dashboardUri,
-          mimeType: "text/html",
-          text: dashboard.html
-        }
-      }
-    ],
+    content,
     structuredContent: {
       ...payload,
       dashboardPath: dashboard.dashboardPath,
       dashboardUri: dashboard.dashboardUri,
       rows: dashboard.rows,
+      datasets: dashboard.datasets,
+      datasetProfiles: dashboard.datasetProfiles,
       html: dashboard.html
     }
   };
