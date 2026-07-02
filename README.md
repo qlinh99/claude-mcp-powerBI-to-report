@@ -1,10 +1,10 @@
 # mcp-powerBI-to-report
 
-Claude-compatible MCP server for discovering Fabric/Power BI workspaces, querying semantic models, and returning executive answers as both text and self-contained HTML reports.
+MCP server tương thích Claude để khám phá workspace Fabric/Power BI, truy vấn semantic model, và trả lời dạng câu hỏi điều hành (executive) bằng cả văn bản lẫn báo cáo HTML độc lập (self-contained).
 
-This repo wraps Microsoft's official [`powerbi-modeling-mcp`](https://github.com/microsoft/powerbi-modeling-mcp) and relies entirely on its XMLA/TOM authentication path (no REST catalog login, no device-login auth).
+Repo này bọc quanh [`powerbi-modeling-mcp`](https://github.com/microsoft/powerbi-modeling-mcp) chính thức của Microsoft và hoàn toàn dựa vào cơ chế xác thực XMLA/TOM của công cụ đó (không dùng REST catalog login, không dùng device-login auth).
 
-## Tools
+## Các tool
 
 - `list_semantic_models_in_workspace`
 - `get_known_workspace_catalog`
@@ -12,11 +12,11 @@ This repo wraps Microsoft's official [`powerbi-modeling-mcp`](https://github.com
 - `execute_multi_semantic_report`
 - `execute_dax_query`
 - `execute_dax_report_query`
-- `execute_dax_dashboard_query` (compatibility alias)
+- `execute_dax_dashboard_query` (alias tương thích ngược)
 
-## Quick Install for Claude Desktop
+## Cài đặt nhanh cho Claude Desktop
 
-Requires `git`, `node` (>= 18), and `npm` (>= 9) on `PATH`. The installers install production dependencies, use the prebuilt `dist/server.js`, write `.env`, and merge the server into Claude Desktop's `mcpServers` config. **Close Claude Desktop completely (system tray Quit, not just the window) before running any of these** — otherwise Claude may overwrite the config while the installer is editing it.
+Yêu cầu có sẵn `git`, `node` (>= 18), và `npm` (>= 9) trên `PATH`. Các script cài đặt sẽ cài production dependencies, dùng bản build sẵn `dist/server.js`, ghi file `.env`, và merge server vào cấu hình `mcpServers` của Claude Desktop. **Đóng hẳn Claude Desktop (Quit từ system tray, không chỉ đóng cửa sổ) trước khi chạy các lệnh dưới đây** — nếu không Claude có thể ghi đè lại config trong lúc installer đang chỉnh sửa.
 
 ### macOS
 
@@ -24,44 +24,44 @@ Requires `git`, `node` (>= 18), and `npm` (>= 9) on `PATH`. The installers insta
 curl -fsSL https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace GSM_MCP_POC_WORKSPACE
 ```
 
-Don't have Git/Node yet? Install Homebrew + `git node` first, then run the command above.
+Chưa có Git/Node? Cài Homebrew rồi `brew install git node` trước, sau đó chạy lệnh trên.
 
 ### Windows (PowerShell)
 
-Recommended one-command setup — clones/updates the repo, installs dependencies, and configures Claude Desktop:
+Cách cài khuyến nghị (một lệnh) — tự clone/cập nhật repo, cài dependencies, và cấu hình Claude Desktop:
 
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/install-windows.ps1" -OutFile "$env:TEMP\install-powerbi-mcp.ps1"
 powershell -ExecutionPolicy Bypass -File "$env:TEMP\install-powerbi-mcp.ps1" -Workspace "GSM_MCP_POC_WORKSPACE"
 ```
 
-If you already have the repo cloned locally, run the same installer directly instead:
+Nếu đã có sẵn repo trên máy, chạy thẳng installer trong thư mục đó:
 
 ```powershell
-cd <path-to-repo>
+cd <đường-dẫn-repo>
 powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Workspace "GSM_MCP_POC_WORKSPACE"
 ```
 
-Useful flags on `install-windows.ps1`:
+Các flag hữu ích của `install-windows.ps1`:
 
-| Flag | Purpose |
+| Flag | Chức năng |
 |---|---|
-| `-RepoDir <path>` | Where to clone/update the repo (default `~\mcp-powerBI-to-report`) |
-| `-CorporateNpm` | Temporarily sets `npm_config_strict_ssl=false` for corporate SSL-inspection proxies (reverted automatically). Use only if the normal command fails on certificate/proxy errors. Does not bypass gateway blocks like `403 MediaTypeBlocked` — the proper enterprise fix is an internal npm registry, trusted CA (`npm cafile` / `NODE_EXTRA_CA_CERTS`), gateway whitelist, or offline-provisioned Microsoft binary. |
-| `-Clean` | Removes `node_modules` before reinstalling |
-| `-SkipPrereqInstall` | Skip attempting to install missing prerequisites |
+| `-RepoDir <path>` | Nơi clone/cập nhật repo (mặc định `~\mcp-powerBI-to-report`) |
+| `-CorporateNpm` | Tạm thời set `npm_config_strict_ssl=false` cho mạng công ty có proxy kiểm tra SSL (tự khôi phục lại sau khi chạy xong). Chỉ dùng khi lệnh thường bị lỗi certificate/proxy. Không bỏ qua được các chặn ở gateway kiểu `403 MediaTypeBlocked` — cách đúng cho môi trường doanh nghiệp vẫn là dùng npm registry nội bộ, trusted CA (`npm cafile` / `NODE_EXTRA_CA_CERTS`), whitelist gateway, hoặc cấp phát binary Microsoft offline đã được duyệt. |
+| `-Clean` | Xoá `node_modules` trước khi cài lại |
+| `-SkipPrereqInstall` | Bỏ qua bước tự cài các phần mềm còn thiếu |
 
-If the repo is already cloned with a dirty working tree, or you just want to (re)configure Claude Desktop without touching the repo, call the config-only script directly:
+Nếu repo đã clone sẵn nhưng đang có thay đổi cục bộ (dirty working tree), hoặc bạn chỉ muốn cấu hình lại Claude Desktop mà không đụng tới repo, gọi thẳng script cấu hình:
 
 ```powershell
-cd <path-to-repo>
+cd <đường-dẫn-repo>
 npm install --omit=dev --include=optional
 powershell -ExecutionPolicy Bypass -File scripts\setup-claude-desktop.ps1 -Workspace "GSM_MCP_POC_WORKSPACE"
 ```
 
-Portable Node.js: set `$env:NODE_PORTABLE_HOME` before running if you need a specific Node build instead of the one on `PATH`.
+Node.js portable: set `$env:NODE_PORTABLE_HOME` trước khi chạy nếu muốn dùng một bản Node cụ thể thay vì bản đang có trên `PATH`.
 
-Expected success output:
+Kết quả thành công sẽ có dạng:
 
 ```text
 Claude Desktop config updated: C:\Users\<you>\AppData\Roaming\Claude\claude_desktop_config.json
@@ -69,27 +69,27 @@ Local env written: C:\Users\<you>\mcp-powerBI-to-report\.env
 Start Claude Desktop again, then use MCP server: mcp-powerBI-to-report
 ```
 
-On Windows, all installers resolve the Modeling MCP command in this order: native `.exe` -> local `node_modules\.bin\powerbi-modeling-mcp.cmd` -> `npx` fallback.
+Trên Windows, tất cả installer đều thử tìm lệnh Modeling MCP theo thứ tự: `.exe` native -> `node_modules\.bin\powerbi-modeling-mcp.cmd` cục bộ -> `npx` (dự phòng).
 
-### If IT policy blocks installers
+### Nếu chính sách IT chặn cài đặt
 
-Ask IT to install Git, Node.js LTS (includes npm), and Claude Desktop, then run the setup command for your OS above.
+Nhờ IT cài Git, Node.js LTS (đã bao gồm npm), và Claude Desktop, sau đó chạy lệnh cài đặt theo OS ở trên.
 
-### After setup
+### Sau khi cài xong
 
-Restart Claude Desktop, then ask it:
+Khởi động lại Claude Desktop, rồi hỏi:
 
 ```text
 Use mcp-powerBI-to-report to diagnose the local Power BI MCP setup.
 ```
 
-If diagnostics are clean:
+Nếu chẩn đoán ổn:
 
 ```text
 Use mcp-powerBI-to-report to list semantic models in workspace GSM_MCP_POC_WORKSPACE.
 ```
 
-## Manual Install
+## Cài đặt thủ công
 
 ```bash
 git clone https://github.com/qlinh99/claude-mcp-powerBI-to-report.git
@@ -98,27 +98,27 @@ npm install --omit=dev --include=optional
 npm run setup
 ```
 
-`npm run setup` interactively asks for the Microsoft `powerbi-modeling-mcp` command/args, known workspace names, default CEO workspace, and optional semantic-model/report-output-dir fallbacks, then writes a local `.env` (mode `0600`) that the server loads on start.
+`npm run setup` sẽ hỏi tương tác về lệnh/tham số `powerbi-modeling-mcp` của Microsoft, danh sách tên workspace đã biết, workspace mặc định cho CEO, và các fallback tuỳ chọn cho semantic model/thư mục xuất báo cáo, sau đó ghi file `.env` cục bộ (quyền `0600`) mà server sẽ tự nạp khi khởi động.
 
-On macOS, `npm install` also ad-hoc signs the Microsoft native Modeling MCP binary so Claude can launch it without an unsigned-binary failure — rerun it if Claude Desktop reports a launch error.
+Trên macOS, `npm install` cũng tự ad-hoc sign binary native Modeling MCP của Microsoft để Claude khởi chạy được mà không bị lỗi "unsigned binary" — chạy lại lệnh này nếu Claude Desktop báo lỗi khi khởi chạy.
 
-On Windows, the command resolution order is the same as above: `node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe` -> `node_modules\.bin\powerbi-modeling-mcp.cmd` -> `npx`.
+Trên Windows, thứ tự tìm lệnh vẫn như trên: `node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe` -> `node_modules\.bin\powerbi-modeling-mcp.cmd` -> `npx`.
 
-## Claude Desktop Config Reference
+## Tham khảo cấu hình Claude Desktop
 
-### 1. Config file location
+### 1. Vị trí file config
 
-| OS | Path |
+| OS | Đường dẫn |
 |----|------|
 | macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Windows (standard) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Windows (chuẩn) | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Windows (Store/MSIX) | `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json` |
 
-> Close Claude Desktop completely before editing this file by hand — otherwise Claude can overwrite it and remove `mcpServers`.
+> Đóng hẳn Claude Desktop trước khi tự tay sửa file này — nếu không Claude có thể ghi đè và làm mất `mcpServers`.
 
-### 2. mcpServers entry
+### 2. Mục mcpServers
 
-Minimal (uses `.env` written by `npm run setup`):
+Tối giản (dùng `.env` do `npm run setup` ghi ra):
 
 ```json
 {
@@ -131,7 +131,7 @@ Minimal (uses `.env` written by `npm run setup`):
 }
 ```
 
-Full config with explicit env overrides:
+Cấu hình đầy đủ với env override tường minh:
 
 ```json
 {
@@ -152,21 +152,21 @@ Full config with explicit env overrides:
 }
 ```
 
-Platform-specific `command`/`POWERBI_MODELING_MCP_COMMAND` values:
+Giá trị `command`/`POWERBI_MODELING_MCP_COMMAND` theo từng nền tảng:
 
-| Platform | `command` | `POWERBI_MODELING_MCP_COMMAND` |
+| Nền tảng | `command` | `POWERBI_MODELING_MCP_COMMAND` |
 |---|---|---|
 | macOS Apple Silicon | `/opt/homebrew/bin/node` | `.../node_modules/@microsoft/powerbi-modeling-mcp-darwin-arm64/dist/powerbi-modeling-mcp` |
 | macOS Intel | `/usr/local/bin/node` | `.../node_modules/@microsoft/powerbi-modeling-mcp-darwin-x64/dist/powerbi-modeling-mcp` |
-| Windows (native exe) | absolute path to `node.exe` | `...\node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe` |
-| Windows (local shim) | absolute path to `node.exe` | `...\node_modules\.bin\powerbi-modeling-mcp.cmd` |
-| Windows (npx fallback) | absolute path to `node.exe` | `C:\Program Files\nodejs\npx.cmd` with args `-y @microsoft/powerbi-modeling-mcp@latest --start --authmode=interactive` |
+| Windows (exe native) | đường dẫn tuyệt đối tới `node.exe` | `...\node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe` |
+| Windows (shim cục bộ) | đường dẫn tuyệt đối tới `node.exe` | `...\node_modules\.bin\powerbi-modeling-mcp.cmd` |
+| Windows (dự phòng npx) | đường dẫn tuyệt đối tới `node.exe` | `C:\Program Files\nodejs\npx.cmd` với args `-y @microsoft/powerbi-modeling-mcp@latest --start --authmode=interactive` |
 
-> **Windows note:** the bridge launches `.cmd` commands and `npx` through the Windows shell. Without that, Node can fail with `spawn npx ENOENT`.
+> **Lưu ý Windows:** bridge chạy các lệnh `.cmd` và `npx` thông qua shell của Windows. Nếu thiếu điều đó, Node có thể lỗi `spawn npx ENOENT`.
 
-A ready-to-edit example is at [`docs/claude-desktop-config.example.json`](docs/claude-desktop-config.example.json).
+File mẫu sẵn để chỉnh sửa: [`docs/claude-desktop-config.example.json`](docs/claude-desktop-config.example.json).
 
-### 3. Local development (no build step)
+### 3. Phát triển cục bộ (không cần build)
 
 ```json
 {
@@ -179,55 +179,55 @@ A ready-to-edit example is at [`docs/claude-desktop-config.example.json`](docs/c
 }
 ```
 
-### 4. Agent auto setup
+### 4. Agent tự cài đặt
 
 ```bash
 npm run setup:agent -- --workspaces your-workspace-name
-# or write straight to Claude Desktop config (auto-backed up):
+# hoặc ghi thẳng vào config Claude Desktop (tự động backup):
 npm run setup:agent -- --workspaces your-workspace-name --write-desktop-config
 ```
 
-## Authentication
+## Xác thực (Authentication)
 
-This MCP entirely delegates authentication to the underlying Microsoft `@microsoft/powerbi-modeling-mcp` tool, via its interactive auth mode or explicit args in `POWERBI_MODELING_MCP_ARGS`.
+MCP này giao toàn bộ việc xác thực cho công cụ `@microsoft/powerbi-modeling-mcp` của Microsoft, thông qua chế độ auth tương tác (interactive) hoặc tham số tường minh trong `POWERBI_MODELING_MCP_ARGS`.
 
-## Usage
+## Cách dùng
 
 ```text
 Use mcp-powerBI-to-report to diagnose the local Power BI MCP setup.
 Use mcp-powerBI-to-report to list semantic models in workspace test-mcp.
 ```
 
-The workspace name must be known and provided — if missing, Claude should ask instead of guessing.
+Tên workspace phải được biết trước và cung cấp rõ ràng — nếu thiếu, Claude nên hỏi lại thay vì đoán.
 
-For a CEO workflow, set:
+Với quy trình dành cho CEO, cấu hình:
 
 ```env
 POWERBI_KNOWN_WORKSPACES=test-mcp
 POWERBI_DEFAULT_WORKSPACE=test-mcp
-# Optional fallback only. Prefer letting Claude choose from workspace schema.
+# Chỉ là fallback tuỳ chọn. Nên để Claude tự chọn theo schema workspace.
 # POWERBI_DEFAULT_SEMANTIC_MODEL=hospital
-# Optional folder for generated HTML reports.
+# Thư mục tuỳ chọn để chứa báo cáo HTML sinh ra.
 # POWERBI_REPORT_OUTPUT_DIR=/path/to/powerbi-report-output
 ```
 
-Claude then uses `get_known_workspace_catalog` to list models, picks the relevant one from schema/context, and calls `execute_dax_report_query` for business questions. The wrapper keeps the Modeling MCP process alive across a session, so follow-up questions reuse the same connection and avoid repeated login prompts.
+Sau đó Claude dùng `get_known_workspace_catalog` để liệt kê model, chọn model phù hợp theo schema/ngữ cảnh, và gọi `execute_dax_report_query` cho các câu hỏi nghiệp vụ. Wrapper giữ tiến trình Modeling MCP sống xuyên suốt phiên làm việc, nên các câu hỏi tiếp theo dùng lại cùng kết nối, tránh phải đăng nhập lại nhiều lần.
 
-`execute_dax_report_query` returns a text summary, `insights`/`insightCards` (what/why/so-what/action/confidence/evidence), a `dataProfile` (detected measures, dimensions, row/column counts, gaps), `nextQuestions`, `structuredContent` (rows, columns, generated HTML), an embedded `text/html` MCP resource, and `reportPath`/`reportUri` to open the generated file. Use `execute_dax_query` only when raw query output is enough.
+`execute_dax_report_query` trả về: tóm tắt văn bản, `insights`/`insightCards` (what/why/so-what/action/confidence/evidence), `dataProfile` (measure, dimension, số dòng/cột, các khoảng trống dữ liệu đã phát hiện), `nextQuestions`, `structuredContent` (rows, columns, HTML sinh ra), một resource `text/html` nhúng theo chuẩn MCP, và `reportPath`/`reportUri` để mở file đã sinh. Chỉ dùng `execute_dax_query` khi chỉ cần dữ liệu thô.
 
-### Multi-semantic executive reports
+### Báo cáo điều hành đa semantic model
 
-One CEO question can need evidence from more than one semantic model — e.g. revenue in `sale_vehicle-vf`, campaign spend/leads in a separate marketing model. Recommended flow:
+Một câu hỏi CEO có thể cần bằng chứng từ nhiều semantic model — ví dụ doanh thu nằm ở `sale_vehicle-vf`, còn chi phí campaign/lead nằm ở một model marketing riêng. Luồng khuyến nghị:
 
 ```text
-question → get_known_workspace_catalog → plan_multi_semantic_report
-→ one DAX query per semantic model/evidence role → execute_multi_semantic_report
-→ text answer + HTML report
+câu hỏi → get_known_workspace_catalog → plan_multi_semantic_report
+→ mỗi semantic model/vai trò bằng chứng viết một DAX query → execute_multi_semantic_report
+→ trả lời văn bản + báo cáo HTML
 ```
 
-`plan_multi_semantic_report` decides whether one or multiple models are needed, the decision intent (`variance_decomposition`, `opportunity_prioritization`, `portfolio_decision`, `forecast_risk`), required evidence, model roles, join grain/keys, dashboard blocks, and warns when evidence is missing or can't prove causality.
+`plan_multi_semantic_report` quyết định cần một hay nhiều model, ý định quyết định (`variance_decomposition`, `opportunity_prioritization`, `portfolio_decision`, `forecast_risk`), bằng chứng cần thiết, vai trò từng model, join grain/join key, các block cho ReportSpec, và cảnh báo khi thiếu bằng chứng hoặc không thể chứng minh quan hệ nhân quả.
 
-`execute_multi_semantic_report` accepts multiple DAX queries:
+`execute_multi_semantic_report` nhận nhiều DAX query:
 
 ```json
 {
@@ -253,13 +253,32 @@ question → get_known_workspace_catalog → plan_multi_semantic_report
 }
 ```
 
-Rows are tagged with `DataSource`, `WorkspaceName`, `SemanticModelName`, `EvidenceRole` and stay combined in `structuredContent.rows` for audit, but the HTML report keeps each query's dataset separate rather than forcing everything into one chart — it profiles each result's shape and renders dataset-specific evidence blocks (data sources/quality, join grain/keys/confidence, grain-mismatch warnings, time-series/ranking/cross-dimension blocks, scorecards for shallow queries, and an executive synthesis board of what each model proves and what's still missing).
+Các dòng dữ liệu được gắn nhãn `DataSource`, `WorkspaceName`, `SemanticModelName`, `EvidenceRole` và vẫn gộp chung trong `structuredContent.rows` phục vụ audit, nhưng báo cáo HTML giữ dataset của từng query tách riêng thay vì ép tất cả vào một biểu đồ — nó tự nhận diện hình dạng (shape) từng kết quả và render các block bằng chứng riêng cho từng dataset (nguồn dữ liệu/chất lượng, join grain/key/độ tin cậy, cảnh báo lệch grain, block time-series/ranking/cross-dimension, scorecard cho query quá đơn giản, và một bảng tổng hợp điều hành cho biết mỗi model chứng minh được gì, hỗ trợ quyết định gì, và còn thiếu bằng chứng nào).
 
-**Important:** if semantic models don't share the requested grain, the report stays in source-separated mode and treats cross-source findings as directional correlation, not proven causality. To compare/join models directly, aggregate each DAX query to the same `joinKeys` first (e.g. `Month x Province x Model`).
+**Lưu ý quan trọng:** nếu các semantic model không cùng grain với yêu cầu, báo cáo giữ ở chế độ tách nguồn (source-separated evidence) và mô tả các phát hiện xuyên nguồn là tương quan có định hướng (directional correlation), không phải quan hệ nhân quả đã chứng minh. Muốn so sánh/join trực tiếp các model, agent phải tự aggregate từng DAX query về cùng `joinKeys` trước (ví dụ `Month x Province x Model`).
 
-### Revenue month extremes
+### Tháng có doanh thu cực trị
 
-For questions like `Tháng nào có doanh thu thấp nhất, cao nhất và tại sao?`, prefer `execute_dax_report_query` with DAX returning a month/date column, a numeric revenue column, and explanatory driver columns your model has (order count, customer count, average ticket, product/category, region, branch, channel):
+Với các câu hỏi kiểu:
+
+```text
+Tháng nào có doanh thu thấp nhất, cao nhất và tại sao?
+```
+
+Nên dùng `execute_dax_report_query` và viết DAX trả về: một cột kỳ/tháng, một cột doanh thu dạng số, và các cột driver giải thích nếu model có (số đơn hàng, số khách hàng, giá trị đơn trung bình, sản phẩm/danh mục, khu vực, chi nhánh, kênh bán).
+
+Report generator tự động phát hiện cột tháng và cột doanh thu, tổng hợp doanh thu theo tháng, và trả về tháng cao nhất/thấp nhất trong `summary` và `insights`. Với câu hỏi giải thích (`why`, `tại sao`, `vì sao`, cao nhất/thấp nhất), nó còn chạy một bước "evidence sufficiency gate" trước khi render:
+
+- quét cột của semantic model bằng `INFO.COLUMNS()`
+- suy luận các dimension sẵn có như `Region`, `Model`, `Province`, `Dealer`, `Campaign`
+- suy luận các driver như units, ASP, margin, discount, marketing, inventory, market share
+- suy luận kỳ (period) trọng tâm từ câu hỏi hoặc dữ liệu trả về
+- chạy các query dò khoảng trống (slice gap) theo từng dimension và cross-dimension
+- render mục `Evidence acquired before conclusion` cho biết đã truy vấn gì và phần schema nào thực sự còn thiếu
+
+Báo cáo HTML còn có thêm lớp quyết định điều hành gồm `What happened`, `Why it happened`, `So what`, revenue bridge, driver tree, decision levers, run-rate read, và bảng bằng chứng. Nếu semantic model thiếu các trường như `Dealer`, `Campaign`, `Lead`, hoặc `Conversion`, báo cáo chỉ đánh dấu "thiếu" sau khi đã thực sự quét schema.
+
+Ví dụ hình dạng DAX query:
 
 ```dax
 EVALUATE
@@ -275,25 +294,21 @@ SUMMARIZECOLUMNS(
 ORDER BY 'Date'[YearMonth]
 ```
 
-The report generator auto-detects month/revenue columns, aggregates by month, and returns the high/low months in `summary`/`insights`. For explanation questions (`why`, `tại sao`, `vì sao`, highest/lowest), it first runs an evidence-sufficiency gate: scans columns via `INFO.COLUMNS()`, infers available dimensions (`Region`, `Model`, `Province`, `Dealer`, `Campaign`) and drivers (units, ASP, margin, discount, marketing, inventory, market share), infers the focus period, runs slice-gap queries across dimensions, and renders an `Evidence acquired before conclusion` section showing what was queried vs. genuinely missing from the schema.
+## Chế độ vận hành cho CEO
 
-The HTML report adds an executive decision layer (`What happened`, `Why it happened`, `So what`, revenue bridge, driver tree, decision levers, run-rate read, evidence tables) and only marks fields like `Dealer`/`Campaign`/`Lead`/`Conversion` as missing after an actual schema scan.
+- Giữ Claude Desktop và MCP server này chạy xuyên suốt phiên làm việc; tránh khởi động lại giữa các câu hỏi liên quan — câu hỏi đầu tiên trong phiên mới có thể kích hoạt xác thực Microsoft, các câu sau dùng lại kết nối sẵn có.
+- Cấu hình `POWERBI_KNOWN_WORKSPACES` và `POWERBI_DEFAULT_WORKSPACE`. Coi `POWERBI_DEFAULT_SEMANTIC_MODEL` là fallback tuỳ chọn, không bắt buộc.
+- Đặt câu hỏi nghiệp vụ bằng ngôn ngữ tự nhiên; Claude sẽ tự sinh DAX và gọi `execute_dax_report_query`.
 
-## CEO Operating Mode
+## Kết quả báo cáo HTML
 
-- Keep Claude Desktop and this MCP server running during the session; avoid restarting between related questions — the first query in a fresh session may trigger Microsoft auth, follow-ups reuse the existing connection.
-- Configure `POWERBI_KNOWN_WORKSPACES` and `POWERBI_DEFAULT_WORKSPACE`. Treat `POWERBI_DEFAULT_SEMANTIC_MODEL` as an optional fallback, not required.
-- Ask business questions in plain language; Claude generates DAX and calls `execute_dax_report_query`.
+File HTML độc lập gồm: KPI card, câu trả lời điều hành/driver tree/revenue bridge/decision levers/run-rate read, các lớp insight `WHAT`/`WHY`/`SO WHAT`/`NOW WHAT`, phân tích đóng góp (contribution analysis), biểu đồ SVG tự chứa (line, combo bar+line, pie, donut, scatter, map) được chọn theo hình dạng dữ liệu, các "pocket" cross-dimension, mục theo dõi rủi ro/cơ hội, và các câu hỏi drill-down gợi ý tiếp theo — tuân theo quy tắc chọn biểu đồ gần giống Power BI (line cho time series, ranked bar cho tập category lớn, donut chỉ dùng cho tỷ lệ phần-tổng nhỏ, heatmap cho cross-dimension pocket, scatter chỉ khi đủ số điểm dữ liệu số, map chỉ khi có trường địa lý thật sự).
 
-## HTML Report Output
+Dữ liệu thô vẫn có sẵn trong `structuredContent.rows` phục vụ audit/debug; các lần chạy đa semantic model còn expose thêm `structuredContent.datasets` và `structuredContent.datasetProfiles`.
 
-Standalone HTML files with KPI cards, executive answer/driver tree/revenue bridge/decision levers/run-rate read, `WHAT`/`WHY`/`SO WHAT`/`NOW WHAT` insight layers, contribution analysis, self-contained SVG charts (line, combo bar+line, pie, donut, scatter, map) chosen by data shape, cross-dimension pockets, a risk/opportunity watch, and next-best drill-down questions — governed by Power-BI-like chart rules (line for time series, ranked bar for larger category sets, donut only for small part-to-whole mixes, heatmap for cross-dimension pockets, scatter only with sufficient numeric observations, map only for true geography fields).
+File được ghi vào `POWERBI_REPORT_OUTPUT_DIR`, sau đó tới `POWERBI_DASHBOARD_OUTPUT_DIR` (để tương thích ngược), nếu không có thì ghi vào `./powerbi-report-output` tính từ thư mục làm việc của tiến trình MCP.
 
-Raw rows stay available in `structuredContent.rows` for audit/debug; multi-semantic runs also expose `structuredContent.datasets` and `structuredContent.datasetProfiles`.
-
-Files are written to `POWERBI_REPORT_OUTPUT_DIR`, then `POWERBI_DASHBOARD_OUTPUT_DIR` (compatibility), otherwise `./powerbi-report-output` from the MCP process's working directory.
-
-## Environment
+## Môi trường (Environment)
 
 ```bash
 cp .env.example .env
@@ -301,7 +316,7 @@ set -a; source .env; set +a
 npm run dev
 ```
 
-## Notes
+## Ghi chú
 
-- The Microsoft Modeling MCP bridge defaults to `npx -y @microsoft/powerbi-modeling-mcp@latest --start`. Override with `POWERBI_MODELING_MCP_COMMAND` / `POWERBI_MODELING_MCP_ARGS` for a signed local binary.
-- Local verification notes: [`docs/verification.md`](docs/verification.md).
+- Bridge Modeling MCP của Microsoft mặc định dùng `npx -y @microsoft/powerbi-modeling-mcp@latest --start`. Override bằng `POWERBI_MODELING_MCP_COMMAND` / `POWERBI_MODELING_MCP_ARGS` nếu bạn có binary cục bộ đã ký (signed).
+- Ghi chú kiểm thử cục bộ: [`docs/verification.md`](docs/verification.md).
