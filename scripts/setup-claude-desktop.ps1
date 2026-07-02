@@ -157,10 +157,9 @@ function Write-JsonAtomic($Path, $Value) {
     [System.IO.File]::WriteAllText($tempPath, $json + [Environment]::NewLine, $utf8NoBom)
     (Get-Content $tempPath -Raw | ConvertFrom-Json) | Out-Null
     if (Test-Path $Path) {
-      [System.IO.File]::Replace($tempPath, $Path, $null)
-    } else {
-      [System.IO.File]::Move($tempPath, $Path)
+      Remove-Item -Path $Path -Force
     }
+    [System.IO.File]::Move($tempPath, $Path)
     (Get-Content $Path -Raw | ConvertFrom-Json) | Out-Null
   } finally {
     if (Test-Path $tempPath) {
