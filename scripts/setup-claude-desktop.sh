@@ -23,11 +23,11 @@ Options:
 
 Examples:
   bash scripts/setup-claude-desktop.sh --workspace test-mcp
-  curl -fsSL https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace test-mcp
+  curl -fsSL https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace test-mcp
 EOF
 }
 
-repo_url="https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git"
+repo_url="https://github.com/qlinh99/claude-mcp-powerBI-to-report.git"
 script_source="${BASH_SOURCE[0]:-}"
 if [[ -n "$script_source" && -f "$script_source" && "$script_source" != /dev/fd/* ]]; then
   script_dir="$(cd "$(dirname "$script_source")" && pwd)"

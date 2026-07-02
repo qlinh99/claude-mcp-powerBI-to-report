@@ -125,7 +125,7 @@ $NpmCommand = Resolve-NpmCommand
 Assert-NodeAndNpmVersion $NpmCommand
 
 if (!(Test-Path "$RepoDir\.git")) {
-  git clone https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git $RepoDir
+  git clone https://github.com/qlinh99/claude-mcp-powerBI-to-report.git $RepoDir
   if ($LASTEXITCODE -ne 0) {
     throw "git clone failed."
   }

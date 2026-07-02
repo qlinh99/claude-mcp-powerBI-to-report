@@ -2,7 +2,7 @@
 
 Claude-compatible MCP server for discovering Fabric/Power BI workspaces, querying semantic models, and returning executive answers as both text and self-contained HTML reports.
 
-This repo wraps Microsoft's official [`powerbi-modeling-mcp`](https://github.com/microsoft/powerbi-modeling-mcp). It relies entirely on the XMLA/TOM authentication path provided by that official tool.
+This repo wraps Microsoft's official [`powerbi-modeling-mcp`](https://github.com/microsoft/powerbi-modeling-mcp) and relies entirely on its XMLA/TOM authentication path (no REST catalog login, no device-login auth).
 
 ## Tools
 
@@ -16,62 +16,52 @@ This repo wraps Microsoft's official [`powerbi-modeling-mcp`](https://github.com
 
 ## Quick Install for Claude Desktop
 
-Use these commands for a one-time setup on a new device.
+Requires `git`, `node` (>= 18), and `npm` (>= 9) on `PATH`. The installers install production dependencies, use the prebuilt `dist/server.js`, write `.env`, and merge the server into Claude Desktop's `mcpServers` config. **Close Claude Desktop completely (system tray Quit, not just the window) before running any of these** — otherwise Claude may overwrite the config while the installer is editing it.
 
-The setup installs production npm dependencies, uses the prebuilt `dist/server.js`, writes `.env`, updates Claude Desktop `mcpServers`, and writes the resolved absolute Node.js command into Claude config. On Windows it configures the Microsoft Modeling MCP command in this order:
-
-```text
-native .exe -> local node_modules\.bin\powerbi-modeling-mcp.cmd -> npx fallback
-```
-
-It also enforces:
-
-```text
-Node.js >= 18
-npm >= 9
-```
-
-and configures:
-
-```text
-POWERBI_MODELING_MCP_ARGS=--start --authmode=interactive
-```
-
-This project does not use REST catalog login or device-login auth.
-
-### macOS - Git and Node already installed
+### macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace GSM_MCP_POC_WORKSPACE
+curl -fsSL https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace GSM_MCP_POC_WORKSPACE
 ```
 
-The macOS setup resolves `node` with `command -v node` and writes that absolute path, for example `/opt/homebrew/bin/node`, into `claude_desktop_config.json`.
+Don't have Git/Node yet? Install Homebrew + `git node` first, then run the command above.
 
-### macOS - Install Git/Node first, then setup MCP
+### Windows (PowerShell)
 
-```bash
-if ! command -v brew >/dev/null 2>&1; then /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; fi; eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null || true)"; brew install git node; curl -fsSL https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace GSM_MCP_POC_WORKSPACE
-```
-
-### Windows PowerShell - recommended one-command setup
-
-Use this command first on company Windows devices. It uses `node`, `npm`, and `git` already available on `PATH`, validates Node.js 18+/npm 9+, clones or fast-forwards the repo, installs dependencies, writes Claude Desktop config, and exits with a clear error if the repo has local changes.
+Recommended one-command setup — clones/updates the repo, installs dependencies, and configures Claude Desktop:
 
 ```powershell
-$ErrorActionPreference="Stop"; Set-Location $HOME; Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "Claude*" } | Stop-Process -Force; if ($env:NODE_PORTABLE_HOME -and (Test-Path (Join-Path $env:NODE_PORTABLE_HOME "node.exe"))) { $env:Path="$env:NODE_PORTABLE_HOME;$env:Path" }; $dir=Join-Path $HOME "mcp-powerBI-to-report"; $nodeCmd=Get-Command node.exe -ErrorAction SilentlyContinue; if (-not $nodeCmd) { $nodeCmd=Get-Command node -ErrorAction SilentlyContinue }; if (-not $nodeCmd) { throw "Node.js 18+ is required but node was not found on PATH" }; $npmCmd=Get-Command npm.cmd -ErrorAction SilentlyContinue; if (-not $npmCmd) { $npmCmd=Get-Command npm -ErrorAction SilentlyContinue }; if (-not $npmCmd) { throw "npm 9+ is required but npm was not found on PATH" }; $gitCmd=Get-Command git.exe -ErrorAction SilentlyContinue; if (-not $gitCmd) { $gitCmd=Get-Command git -ErrorAction SilentlyContinue }; if (-not $gitCmd) { throw "Git is required but git was not found on PATH" }; $nodeExe=$nodeCmd.Source; $nodeVersionText=(& $nodeExe -v).Trim(); if ($LASTEXITCODE -ne 0) { throw "node failed" }; $nodeMajor=[int]($nodeVersionText.TrimStart([char]"v").Split(".")[0]); if ($nodeMajor -lt 18) { throw "Node.js 18 or newer is required. Current: $nodeVersionText at $nodeExe" }; $npmVersionText=(& $npmCmd.Source -v).Trim(); if ($LASTEXITCODE -ne 0) { throw "npm failed" }; $npmMajor=[int]($npmVersionText.Split(".")[0]); if ($npmMajor -lt 9) { throw "npm 9 or newer is required. Current: $npmVersionText" }; Write-Host "Using Node: $nodeExe ($nodeVersionText)"; Write-Host "Using npm: $($npmCmd.Source) ($npmVersionText)"; if (-not (Test-Path "$dir\.git")) { git clone "https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git" $dir; if ($LASTEXITCODE -ne 0) { throw "git clone failed" } } else { Set-Location $dir; git pull --ff-only; if ($LASTEXITCODE -ne 0) { throw "git pull failed. Resolve local changes before continuing." } }; Set-Location $dir; & $npmCmd.Source install --omit=dev --include=optional; if ($LASTEXITCODE -ne 0) { throw "npm install failed" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup-claude-desktop.ps1" -Workspace "GSM_MCP_POC_WORKSPACE" -NodeCommand $nodeExe -SkipInstall; if ($LASTEXITCODE -ne 0) { throw "Claude Desktop setup failed" }; Write-Host "Installation completed successfully. Start Claude Desktop again."
+iwr -UseBasicParsing "https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/install-windows.ps1" -OutFile "$env:TEMP\install-powerbi-mcp.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:TEMP\install-powerbi-mcp.ps1" -Workspace "GSM_MCP_POC_WORKSPACE"
 ```
 
-This is the normal Windows setup command. Do not use the corporate npm command below unless npm fails because of corporate certificate/proxy behavior.
-
-The setup script writes the resolved absolute `node.exe` path into `claude_desktop_config.json`, so Claude Desktop uses the same Node runtime later.
-
-Portable Node.js is optional. If a device needs it, set `NODE_PORTABLE_HOME` first, then run the standard command:
+If you already have the repo cloned locally, run the same installer directly instead:
 
 ```powershell
-$env:NODE_PORTABLE_HOME="D:\ApprovedTools\node-v22.12.0-win-x64"
+cd <path-to-repo>
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Workspace "GSM_MCP_POC_WORKSPACE"
 ```
 
-Expected success output includes:
+Useful flags on `install-windows.ps1`:
+
+| Flag | Purpose |
+|---|---|
+| `-RepoDir <path>` | Where to clone/update the repo (default `~\mcp-powerBI-to-report`) |
+| `-CorporateNpm` | Temporarily sets `npm_config_strict_ssl=false` for corporate SSL-inspection proxies (reverted automatically). Use only if the normal command fails on certificate/proxy errors. Does not bypass gateway blocks like `403 MediaTypeBlocked` — the proper enterprise fix is an internal npm registry, trusted CA (`npm cafile` / `NODE_EXTRA_CA_CERTS`), gateway whitelist, or offline-provisioned Microsoft binary. |
+| `-Clean` | Removes `node_modules` before reinstalling |
+| `-SkipPrereqInstall` | Skip attempting to install missing prerequisites |
+
+If the repo is already cloned with a dirty working tree, or you just want to (re)configure Claude Desktop without touching the repo, call the config-only script directly:
+
+```powershell
+cd <path-to-repo>
+npm install --omit=dev --include=optional
+powershell -ExecutionPolicy Bypass -File scripts\setup-claude-desktop.ps1 -Workspace "GSM_MCP_POC_WORKSPACE"
+```
+
+Portable Node.js: set `$env:NODE_PORTABLE_HOME` before running if you need a specific Node build instead of the one on `PATH`.
+
+Expected success output:
 
 ```text
 Claude Desktop config updated: C:\Users\<you>\AppData\Roaming\Claude\claude_desktop_config.json
@@ -79,56 +69,21 @@ Local env written: C:\Users\<you>\mcp-powerBI-to-report\.env
 Start Claude Desktop again, then use MCP server: mcp-powerBI-to-report
 ```
 
-Close Claude Desktop completely before running setup. Use Quit from the system tray, not just the window close button, so Claude does not overwrite `claude_desktop_config.json` while setup is editing it.
+On Windows, all installers resolve the Modeling MCP command in this order: native `.exe` -> local `node_modules\.bin\powerbi-modeling-mcp.cmd` -> `npx` fallback.
 
-The Windows setup script also stops running Claude Desktop processes before writing config, backs up the existing config, recovers from the latest valid backup if the current config is invalid JSON, writes through a temp file, then validates JSON before and after replacing the live config.
+### If IT policy blocks installers
 
-### Windows PowerShell - optional corporate npm mode
+Ask IT to install Git, Node.js LTS (includes npm), and Claude Desktop, then run the setup command for your OS above.
 
-Use this only when the normal command fails because the company network requires temporary npm SSL compatibility. It still requires `node`, `npm`, and `git` on `PATH`.
+### After setup
 
-```powershell
-$dir="$HOME\mcp-powerBI-to-report"; if (!(Test-Path "$dir\.git")) { git clone https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git $dir }; cd $dir; powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -Workspace "GSM_MCP_POC_WORKSPACE" -CorporateNpm -Clean
-```
-
-`-CorporateNpm` is a temporary compatibility mode for approved test environments. It only sets `npm_config_strict_ssl=false` inside the installer process, cleans npm cache, then removes that override in `finally`. It does not bypass gateway blocks such as `403 MediaTypeBlocked`. The preferred enterprise path is still:
-
-- internal npm registry
-- trusted Root CA via `npm cafile` / `NODE_EXTRA_CA_CERTS`
-- gateway whitelist
-- approved offline provisioning of the Microsoft binary
-
-### Windows PowerShell - existing dirty repo
-
-Use this if the repo is already cloned, the working tree is dirty, or you want to skip `git pull`.
-
-```powershell
-$ErrorActionPreference="Stop"; Set-Location $HOME; if ($env:NODE_PORTABLE_HOME -and (Test-Path (Join-Path $env:NODE_PORTABLE_HOME "node.exe"))) { $env:Path="$env:NODE_PORTABLE_HOME;$env:Path" }; $dir=Join-Path $HOME "mcp-powerBI-to-report"; if (-not (Test-Path "$dir\.git")) { throw "Repository not found: $dir" }; $nodeCmd=Get-Command node.exe -ErrorAction SilentlyContinue; if (-not $nodeCmd) { $nodeCmd=Get-Command node -ErrorAction SilentlyContinue }; if (-not $nodeCmd) { throw "Node.js 18+ is required but node was not found on PATH" }; $npmCmd=Get-Command npm.cmd -ErrorAction SilentlyContinue; if (-not $npmCmd) { $npmCmd=Get-Command npm -ErrorAction SilentlyContinue }; if (-not $npmCmd) { throw "npm 9+ is required but npm was not found on PATH" }; $nodeExe=$nodeCmd.Source; $nodeVersionText=(& $nodeExe -v).Trim(); $nodeMajor=[int]($nodeVersionText.TrimStart([char]"v").Split(".")[0]); if ($nodeMajor -lt 18) { throw "Node.js 18 or newer is required. Current: $nodeVersionText at $nodeExe" }; $npmVersionText=(& $npmCmd.Source -v).Trim(); $npmMajor=[int]($npmVersionText.Split(".")[0]); if ($npmMajor -lt 9) { throw "npm 9 or newer is required. Current: $npmVersionText" }; Set-Location $dir; & $npmCmd.Source install --omit=dev --include=optional; if ($LASTEXITCODE -ne 0) { throw "npm install failed" }; powershell -ExecutionPolicy Bypass -File scripts\setup-claude-desktop.ps1 -Workspace "GSM_MCP_POC_WORKSPACE" -NodeCommand $nodeExe -SkipInstall; if ($LASTEXITCODE -ne 0) { throw "Claude Desktop setup failed" }; Write-Host "Installation completed successfully. Start Claude Desktop again."
-```
-
-### Windows PowerShell - raw GitHub download
-
-Use this only when `raw.githubusercontent.com` is allowed and you want to run only the installer script directly.
-
-```powershell
-iwr -UseBasicParsing "https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/install-windows.ps1" -OutFile "$env:TEMP\install-powerbi-mcp.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\install-powerbi-mcp.ps1" -Workspace "GSM_MCP_POC_WORKSPACE"
-```
-
-If company policy blocks Homebrew, `winget`, or app installation, ask IT to install:
-
-- Git
-- Node.js LTS, which includes npm
-- Claude Desktop
-
-Then run the matching setup command above again.
-
-After setup, start Claude Desktop again and test:
+Restart Claude Desktop, then ask it:
 
 ```text
 Use mcp-powerBI-to-report to diagnose the local Power BI MCP setup.
 ```
 
-Then test Power BI access:
+If diagnostics are clean:
 
 ```text
 Use mcp-powerBI-to-report to list semantic models in workspace GSM_MCP_POC_WORKSPACE.
@@ -136,111 +91,22 @@ Use mcp-powerBI-to-report to list semantic models in workspace GSM_MCP_POC_WORKS
 
 ## Manual Install
 
-Prerequisites:
-
-- Node.js 18 or newer
-- git
-
 ```bash
-git clone https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git
-cd mcp-powerBI-to-report
+git clone https://github.com/qlinh99/claude-mcp-powerBI-to-report.git
+cd claude-mcp-powerBI-to-report
 npm install --omit=dev --include=optional
 npm run setup
 ```
 
-On macOS, `npm install --omit=dev --include=optional` also ad-hoc signs the Microsoft native Modeling MCP binary so Claude can launch it without the unsigned-binary failure.
+`npm run setup` interactively asks for the Microsoft `powerbi-modeling-mcp` command/args, known workspace names, default CEO workspace, and optional semantic-model/report-output-dir fallbacks, then writes a local `.env` (mode `0600`) that the server loads on start.
 
-On Windows, `npm run setup` and the PowerShell installer resolve the Modeling MCP command in this order:
+On macOS, `npm install` also ad-hoc signs the Microsoft native Modeling MCP binary so Claude can launch it without an unsigned-binary failure — rerun it if Claude Desktop reports a launch error.
 
-```text
-node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe
-node_modules\.bin\powerbi-modeling-mcp.cmd
-npx
-```
+On Windows, the command resolution order is the same as above: `node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe` -> `node_modules\.bin\powerbi-modeling-mcp.cmd` -> `npx`.
 
-`npm run setup` asks for:
+## Claude Desktop Config Reference
 
-- Microsoft `powerbi-modeling-mcp` command and args
-- Known workspace names
-- Default CEO workspace
-- Optional default semantic model fallback
-- Optional HTML report output folder
-
-It writes a local `.env` file with mode `0600`. The MCP server loads this file automatically on start.
-
-## Claude Desktop Setup Details
-
-### One-line setup
-
-The fastest path is the bundled Claude Desktop setup script. It detects macOS vs Windows shells, installs dependencies, uses the prebuilt `dist/server.js`, writes `.env`, backs up Claude Desktop config, and merges the MCP server into `mcpServers`. On Windows it prefers the native Microsoft Modeling MCP `.exe`, then the local `.cmd` shim, then `npx`.
-
-From an existing clone:
-
-```bash
-bash scripts/setup-claude-desktop.sh --workspace test-mcp
-```
-
-From a fresh machine:
-
-```bash
-git clone https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git
-cd mcp-powerBI-to-report
-bash scripts/setup-claude-desktop.sh --workspace test-mcp
-```
-
-Or one command that clones to `~/mcp-powerBI-to-report` when needed:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace test-mcp
-```
-
-Windows should run the same command from Git Bash. The script writes Windows-native paths into Claude Desktop config and prefers:
-
-```text
-node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe
-```
-
-If that binary is missing, it uses:
-
-```text
-node_modules\.bin\powerbi-modeling-mcp.cmd
-```
-
-If both local commands are missing, it falls back to:
-
-```text
-npx -y @microsoft/powerbi-modeling-mcp@latest --start --authmode=interactive
-```
-
-PowerShell users should use the native PowerShell setup script, not `curl -fsSL`:
-
-```powershell
-cd C:\Users\<you>\mcp-powerBI-to-report
-powershell -ExecutionPolicy Bypass -File scripts\setup-claude-desktop.ps1 -Workspace GSM_MCP_POC_WORKSPACE
-```
-
-If downloading from GitHub in PowerShell, use `Invoke-WebRequest`:
-
-```powershell
-iwr -UseBasicParsing "https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/setup-claude-desktop.ps1" -OutFile setup-claude-desktop.ps1
-powershell -ExecutionPolicy Bypass -File .\setup-claude-desktop.ps1 -Workspace GSM_MCP_POC_WORKSPACE
-```
-
-Optional npm alias:
-
-```bash
-npm run setup:claude-desktop -- --workspace test-mcp
-```
-
-PowerShell npm alias:
-
-```powershell
-npm run setup:claude-desktop:powershell -- -Workspace GSM_MCP_POC_WORKSPACE
-```
-
-After the script finishes, restart Claude Desktop completely.
-
-### 1. Locate the config file
+### 1. Config file location
 
 | OS | Path |
 |----|------|
@@ -248,18 +114,18 @@ After the script finishes, restart Claude Desktop completely.
 | Windows (standard) | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Windows (Store/MSIX) | `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json` |
 
-> **Important:** Close Claude Desktop completely before editing the config file. Otherwise Claude can overwrite the file and remove `mcpServers`.
+> Close Claude Desktop completely before editing this file by hand — otherwise Claude can overwrite it and remove `mcpServers`.
 
-### 2. Add the MCP server
+### 2. mcpServers entry
 
-Minimal config (uses env vars from the `.env` file written by `npm run setup`):
+Minimal (uses `.env` written by `npm run setup`):
 
 ```json
 {
   "mcpServers": {
     "mcp-powerBI-to-report": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-powerBI-to-report/dist/server.js"]
+      "args": ["/absolute/path/to/claude-mcp-powerBI-to-report/dist/server.js"]
     }
   }
 }
@@ -272,7 +138,7 @@ Full config with explicit env overrides:
   "mcpServers": {
     "mcp-powerBI-to-report": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-powerBI-to-report/dist/server.js"],
+      "args": ["/absolute/path/to/claude-mcp-powerBI-to-report/dist/server.js"],
       "env": {
         "POWERBI_KNOWN_WORKSPACES": "your-workspace-name",
         "POWERBI_DEFAULT_WORKSPACE": "your-workspace-name",
@@ -286,125 +152,28 @@ Full config with explicit env overrides:
 }
 ```
 
-macOS example — Apple Silicon (M1/M2/M3):
+Platform-specific `command`/`POWERBI_MODELING_MCP_COMMAND` values:
 
-```json
-{
-  "mcpServers": {
-    "mcp-powerBI-to-report": {
-      "command": "/opt/homebrew/bin/node",
-      "args": ["/Users/<you>/mcp-powerBI-to-report/dist/server.js"],
-      "env": {
-        "POWERBI_KNOWN_WORKSPACES": "your-workspace-name",
-        "POWERBI_DEFAULT_WORKSPACE": "your-workspace-name",
-        "POWERBI_DEFAULT_SEMANTIC_MODEL": "your-model-name",
-        "POWERBI_MODELING_MCP_COMMAND": "/Users/<you>/mcp-powerBI-to-report/node_modules/@microsoft/powerbi-modeling-mcp-darwin-arm64/dist/powerbi-modeling-mcp",
-        "POWERBI_MODELING_MCP_ARGS": "--start --authmode=interactive",
-        "POWERBI_REPORT_OUTPUT_DIR": "/Users/<you>/powerbi-report-output"
-      }
-    }
-  }
-}
-```
+| Platform | `command` | `POWERBI_MODELING_MCP_COMMAND` |
+|---|---|---|
+| macOS Apple Silicon | `/opt/homebrew/bin/node` | `.../node_modules/@microsoft/powerbi-modeling-mcp-darwin-arm64/dist/powerbi-modeling-mcp` |
+| macOS Intel | `/usr/local/bin/node` | `.../node_modules/@microsoft/powerbi-modeling-mcp-darwin-x64/dist/powerbi-modeling-mcp` |
+| Windows (native exe) | absolute path to `node.exe` | `...\node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe` |
+| Windows (local shim) | absolute path to `node.exe` | `...\node_modules\.bin\powerbi-modeling-mcp.cmd` |
+| Windows (npx fallback) | absolute path to `node.exe` | `C:\Program Files\nodejs\npx.cmd` with args `-y @microsoft/powerbi-modeling-mcp@latest --start --authmode=interactive` |
 
-macOS example — Intel (x64):
+> **Windows note:** the bridge launches `.cmd` commands and `npx` through the Windows shell. Without that, Node can fail with `spawn npx ENOENT`.
 
-```json
-{
-  "mcpServers": {
-    "mcp-powerBI-to-report": {
-      "command": "/usr/local/bin/node",
-      "args": ["/Users/<you>/mcp-powerBI-to-report/dist/server.js"],
-      "env": {
-        "POWERBI_KNOWN_WORKSPACES": "your-workspace-name",
-        "POWERBI_DEFAULT_WORKSPACE": "your-workspace-name",
-        "POWERBI_DEFAULT_SEMANTIC_MODEL": "your-model-name",
-        "POWERBI_MODELING_MCP_COMMAND": "/Users/<you>/mcp-powerBI-to-report/node_modules/@microsoft/powerbi-modeling-mcp-darwin-x64/dist/powerbi-modeling-mcp",
-        "POWERBI_MODELING_MCP_ARGS": "--start --authmode=interactive",
-        "POWERBI_REPORT_OUTPUT_DIR": "/Users/<you>/powerbi-report-output"
-      }
-    }
-  }
-}
-```
+A ready-to-edit example is at [`docs/claude-desktop-config.example.json`](docs/claude-desktop-config.example.json).
 
-> **macOS note:** `npm install --omit=dev --include=optional` automatically ad-hoc signs the Microsoft native binary. If Claude Desktop shows an error launching the binary, run that command again from the project directory, then restart Claude Desktop.
-
-Windows example with native `.exe`:
-
-```json
-{
-  "mcpServers": {
-    "mcp-powerBI-to-report": {
-      "command": "C:\\Users\\<you>\\Tools\\node-v22.12.0-win-x64\\node.exe",
-      "args": ["C:\\Users\\<you>\\mcp-powerBI-to-report\\dist\\server.js"],
-      "env": {
-        "POWERBI_KNOWN_WORKSPACES": "your-workspace-name",
-        "POWERBI_DEFAULT_WORKSPACE": "your-workspace-name",
-        "POWERBI_DEFAULT_SEMANTIC_MODEL": "your-model-name",
-        "POWERBI_MODELING_MCP_COMMAND": "C:\\Users\\<you>\\mcp-powerBI-to-report\\node_modules\\@microsoft\\powerbi-modeling-mcp-win32-x64\\dist\\powerbi-modeling-mcp.exe",
-        "POWERBI_MODELING_MCP_ARGS": "--start --authmode=interactive",
-        "POWERBI_REPORT_OUTPUT_DIR": "C:\\Users\\<you>\\powerbi-report-output"
-      }
-    }
-  }
-}
-```
-
-Windows example with local `.cmd` shim:
-
-```json
-{
-  "mcpServers": {
-    "mcp-powerBI-to-report": {
-      "command": "C:\\Users\\<you>\\Tools\\node-v22.12.0-win-x64\\node.exe",
-      "args": ["C:\\Users\\<you>\\mcp-powerBI-to-report\\dist\\server.js"],
-      "env": {
-        "POWERBI_KNOWN_WORKSPACES": "your-workspace-name",
-        "POWERBI_DEFAULT_WORKSPACE": "your-workspace-name",
-        "POWERBI_DEFAULT_SEMANTIC_MODEL": "your-model-name",
-        "POWERBI_MODELING_MCP_COMMAND": "C:\\Users\\<you>\\mcp-powerBI-to-report\\node_modules\\.bin\\powerbi-modeling-mcp.cmd",
-        "POWERBI_MODELING_MCP_ARGS": "--start --authmode=interactive",
-        "POWERBI_REPORT_OUTPUT_DIR": "C:\\Users\\<you>\\powerbi-report-output"
-      }
-    }
-  }
-}
-```
-
-Windows example with `npx` fallback:
-
-```json
-{
-  "mcpServers": {
-    "mcp-powerBI-to-report": {
-      "command": "C:\\Users\\<you>\\Tools\\node-v22.12.0-win-x64\\node.exe",
-      "args": ["C:\\Users\\<you>\\mcp-powerBI-to-report\\dist\\server.js"],
-      "env": {
-        "POWERBI_KNOWN_WORKSPACES": "your-workspace-name",
-        "POWERBI_DEFAULT_WORKSPACE": "your-workspace-name",
-        "POWERBI_DEFAULT_SEMANTIC_MODEL": "your-model-name",
-        "POWERBI_MODELING_MCP_COMMAND": "C:\\Program Files\\nodejs\\npx.cmd",
-        "POWERBI_MODELING_MCP_ARGS": "-y @microsoft/powerbi-modeling-mcp@latest --start --authmode=interactive",
-        "POWERBI_REPORT_OUTPUT_DIR": "C:\\Users\\<you>\\powerbi-report-output"
-      }
-    }
-  }
-}
-```
-
-> **Windows note:** the bridge launches `.cmd` commands and `npx` through the Windows shell. Without that behavior, Node can fail with `spawn npx ENOENT` on Windows.
-
-A ready-to-edit example file is at [`docs/claude-desktop-config.example.json`](docs/claude-desktop-config.example.json).
-
-### 3. For local development (without building)
+### 3. Local development (no build step)
 
 ```json
 {
   "mcpServers": {
     "mcp-powerBI-to-report": {
       "command": "npx",
-      "args": ["tsx", "/absolute/path/to/mcp-powerBI-to-report/src/server.ts"]
+      "args": ["tsx", "/absolute/path/to/claude-mcp-powerBI-to-report/src/server.ts"]
     }
   }
 }
@@ -412,38 +181,24 @@ A ready-to-edit example file is at [`docs/claude-desktop-config.example.json`](d
 
 ### 4. Agent auto setup
 
-Claude agents can generate or write Claude Desktop configuration with:
-
 ```bash
 npm run setup:agent -- --workspaces your-workspace-name
-```
-
-Write directly to Claude Desktop config with an automatic backup:
-
-```bash
+# or write straight to Claude Desktop config (auto-backed up):
 npm run setup:agent -- --workspaces your-workspace-name --write-desktop-config
 ```
 
 ## Authentication
 
-This MCP entirely delegates authentication to the underlying Microsoft `@microsoft/powerbi-modeling-mcp` tool.
-It uses the Microsoft Modeling MCP interactive auth mode or explicit authentication arguments configured via `POWERBI_MODELING_MCP_ARGS`.
+This MCP entirely delegates authentication to the underlying Microsoft `@microsoft/powerbi-modeling-mcp` tool, via its interactive auth mode or explicit args in `POWERBI_MODELING_MCP_ARGS`.
 
-## Usage Examples
-
-Ask Claude:
+## Usage
 
 ```text
 Use mcp-powerBI-to-report to diagnose the local Power BI MCP setup.
-```
-
-If diagnostics are clean, ask Claude:
-
-```text
 Use mcp-powerBI-to-report to list semantic models in workspace test-mcp.
 ```
 
-The workspace name must be known and provided. If the workspace/model is not provided, Claude should ask the user for the workspace name instead of guessing.
+The workspace name must be known and provided — if missing, Claude should ask instead of guessing.
 
 For a CEO workflow, set:
 
@@ -456,45 +211,21 @@ POWERBI_DEFAULT_WORKSPACE=test-mcp
 # POWERBI_REPORT_OUTPUT_DIR=/path/to/powerbi-report-output
 ```
 
-Then Claude can use `get_known_workspace_catalog` to list models from configured workspaces, choose the relevant semantic model from schema/context, and call `execute_dax_report_query` for follow-up business questions. The wrapper keeps the Microsoft Modeling MCP process alive, so repeated questions reuse the same process and reduce repeated login prompts.
+Claude then uses `get_known_workspace_catalog` to list models, picks the relevant one from schema/context, and calls `execute_dax_report_query` for business questions. The wrapper keeps the Modeling MCP process alive across a session, so follow-up questions reuse the same connection and avoid repeated login prompts.
 
-`execute_dax_report_query` returns:
-
-- concise text summary for chat
-- `insights` for detected executive findings such as highest/lowest revenue month and returned data drivers
-- `insightCards` with structured `what`, `why`, `soWhat`, `action`, `confidence`, evidence, and missing-data notes
-- `dataProfile` with detected measures, dimensions, row/column counts, and gaps that limit deeper root-cause analysis
-- `nextQuestions` for CEO/MBA-style drill-down prompts
-- `structuredContent` with rows, columns, and generated HTML
-- embedded MCP `text/html` resource
-- `reportPath` and `reportUri` for opening the generated local `.html` file
-
-Use `execute_dax_query` only when raw query output is enough.
+`execute_dax_report_query` returns a text summary, `insights`/`insightCards` (what/why/so-what/action/confidence/evidence), a `dataProfile` (detected measures, dimensions, row/column counts, gaps), `nextQuestions`, `structuredContent` (rows, columns, generated HTML), an embedded `text/html` MCP resource, and `reportPath`/`reportUri` to open the generated file. Use `execute_dax_query` only when raw query output is enough.
 
 ### Multi-semantic executive reports
 
-One CEO question can require evidence from more than one semantic model. For example, revenue may live in `sale_vehicle-vf`, while campaign spend, leads, inventory, dealer coverage, or finance margin can live in separate semantic models.
-
-Recommended agent flow:
+One CEO question can need evidence from more than one semantic model — e.g. revenue in `sale_vehicle-vf`, campaign spend/leads in a separate marketing model. Recommended flow:
 
 ```text
-question
-→ get_known_workspace_catalog
-→ plan_multi_semantic_report
-→ write one DAX query per semantic model/evidence role
-→ execute_multi_semantic_report
-→ return text answer + HTML report
+question → get_known_workspace_catalog → plan_multi_semantic_report
+→ one DAX query per semantic model/evidence role → execute_multi_semantic_report
+→ text answer + HTML report
 ```
 
-`plan_multi_semantic_report` helps the agent decide:
-
-- whether one or multiple semantic models are needed
-- decision intent such as `variance_decomposition`, `opportunity_prioritization`, `portfolio_decision`, or `forecast_risk`
-- required evidence
-- recommended model roles
-- join grain and join keys
-- dashboard blocks for the ReportSpec
-- warnings when evidence is missing or cannot prove causality
+`plan_multi_semantic_report` decides whether one or multiple models are needed, the decision intent (`variance_decomposition`, `opportunity_prioritization`, `portfolio_decision`, `forecast_risk`), required evidence, model roles, join grain/keys, dashboard blocks, and warns when evidence is missing or can't prove causality.
 
 `execute_multi_semantic_report` accepts multiple DAX queries:
 
@@ -522,46 +253,13 @@ question
 }
 ```
 
-The report tags rows with `DataSource`, `WorkspaceName`, `SemanticModelName`, and `EvidenceRole`. For audit compatibility, combined rows remain in `structuredContent.rows`, but the HTML report does **not** force all semantic models into one chart. It keeps each query result as a separate dataset, profiles the returned shape, and renders dataset-specific evidence blocks:
+Rows are tagged with `DataSource`, `WorkspaceName`, `SemanticModelName`, `EvidenceRole` and stay combined in `structuredContent.rows` for audit, but the HTML report keeps each query's dataset separate rather than forcing everything into one chart — it profiles each result's shape and renders dataset-specific evidence blocks (data sources/quality, join grain/keys/confidence, grain-mismatch warnings, time-series/ranking/cross-dimension blocks, scorecards for shallow queries, and an executive synthesis board of what each model proves and what's still missing).
 
-- data sources and evidence quality
-- join grain, join keys, and confidence
-- validation warnings when semantic models are at different grains
-- dataset profiles with detected grain, metrics, dimensions, and visual shape
-- time-series blocks for time-grain datasets
-- ranking/contribution blocks for categorical datasets
-- cross-dimension pocket blocks when multiple dimensions are returned
-- metric scorecards or evidence tables when the query is too shallow for stronger visuals
-- an executive synthesis board showing what each semantic model can prove, what decision it supports, and what evidence is still missing
-
-Important rule: if semantic models do not share the requested grain, the report should stay in `source-separated evidence` mode and describe cross-source findings as directional correlation, not proven causality. To compare or join models directly, the agent must aggregate each DAX query to the same `joinKeys` first, for example `Month x Province x Model`.
+**Important:** if semantic models don't share the requested grain, the report stays in source-separated mode and treats cross-source findings as directional correlation, not proven causality. To compare/join models directly, aggregate each DAX query to the same `joinKeys` first (e.g. `Month x Province x Model`).
 
 ### Revenue month extremes
 
-For questions like:
-
-```text
-Tháng nào có doanh thu thấp nhất, cao nhất và tại sao?
-```
-
-Prefer `execute_dax_report_query` and write DAX that returns:
-
-- a month/date period column
-- a numeric revenue/sales/doanh thu column
-- explanatory driver columns when the model has them, such as order count, customer count, average ticket, product/category, region, branch, or channel
-
-The report generator automatically detects the month and revenue columns, aggregates revenue by month, and returns the highest and lowest months in `summary` and `insights`. For explanation questions (`why`, `tại sao`, `vì sao`, highest/lowest), it also runs an evidence sufficiency gate before rendering:
-
-- scan semantic model columns with `INFO.COLUMNS()`
-- infer available dimensions such as `Region`, `Model`, `Province`, `Dealer`, `Campaign`
-- infer drivers such as units, ASP, margin, discount, marketing, inventory, market share
-- infer the focus period from the question or returned rows
-- run slice gap queries by available dimensions and cross-dimensions
-- render an `Evidence acquired before conclusion` section showing what was queried and what schema is genuinely missing
-
-The HTML report also adds an executive decision layer with `What happened`, `Why it happened`, `So what`, revenue bridge, driver tree, decision levers, run-rate read, and evidence tables. If the semantic model lacks fields such as `Dealer`, `Campaign`, `Lead`, or `Conversion`, the report marks those as missing only after schema scan.
-
-Example DAX query shape:
+For questions like `Tháng nào có doanh thu thấp nhất, cao nhất và tại sao?`, prefer `execute_dax_report_query` with DAX returning a month/date column, a numeric revenue column, and explanatory driver columns your model has (order count, customer count, average ticket, product/category, region, branch, channel):
 
 ```dax
 EVALUATE
@@ -577,59 +275,33 @@ SUMMARIZECOLUMNS(
 ORDER BY 'Date'[YearMonth]
 ```
 
+The report generator auto-detects month/revenue columns, aggregates by month, and returns the high/low months in `summary`/`insights`. For explanation questions (`why`, `tại sao`, `vì sao`, highest/lowest), it first runs an evidence-sufficiency gate: scans columns via `INFO.COLUMNS()`, infers available dimensions (`Region`, `Model`, `Province`, `Dealer`, `Campaign`) and drivers (units, ASP, margin, discount, marketing, inventory, market share), infers the focus period, runs slice-gap queries across dimensions, and renders an `Evidence acquired before conclusion` section showing what was queried vs. genuinely missing from the schema.
+
+The HTML report adds an executive decision layer (`What happened`, `Why it happened`, `So what`, revenue bridge, driver tree, decision levers, run-rate read, evidence tables) and only marks fields like `Dealer`/`Campaign`/`Lead`/`Conversion` as missing after an actual schema scan.
+
 ## CEO Operating Mode
 
-For the simplest CEO experience:
-
-- Keep Claude Desktop and this MCP server running during the working session.
-- Avoid restarting Claude between related questions.
-- Configure `POWERBI_DEFAULT_WORKSPACE` and `POWERBI_DEFAULT_SEMANTIC_MODEL`.
-- Configure `POWERBI_KNOWN_WORKSPACES` and `POWERBI_DEFAULT_WORKSPACE`.
-- Treat `POWERBI_DEFAULT_SEMANTIC_MODEL` as an optional fallback, not a required CEO input.
-- Ask business questions in plain language; Claude should generate DAX and call `execute_dax_report_query`.
-
-The first query in a fresh session can still trigger Microsoft authentication. Follow-up queries in the same running MCP session reuse the existing Microsoft Modeling MCP process and connection.
+- Keep Claude Desktop and this MCP server running during the session; avoid restarting between related questions — the first query in a fresh session may trigger Microsoft auth, follow-ups reuse the existing connection.
+- Configure `POWERBI_KNOWN_WORKSPACES` and `POWERBI_DEFAULT_WORKSPACE`. Treat `POWERBI_DEFAULT_SEMANTIC_MODEL` as an optional fallback, not required.
+- Ask business questions in plain language; Claude generates DAX and calls `execute_dax_report_query`.
 
 ## HTML Report Output
 
-Reports are generated as standalone HTML files with:
+Standalone HTML files with KPI cards, executive answer/driver tree/revenue bridge/decision levers/run-rate read, `WHAT`/`WHY`/`SO WHAT`/`NOW WHAT` insight layers, contribution analysis, self-contained SVG charts (line, combo bar+line, pie, donut, scatter, map) chosen by data shape, cross-dimension pockets, a risk/opportunity watch, and next-best drill-down questions — governed by Power-BI-like chart rules (line for time series, ranked bar for larger category sets, donut only for small part-to-whole mixes, heatmap for cross-dimension pockets, scatter only with sufficient numeric observations, map only for true geography fields).
 
-- KPI cards for numeric measures
-- executive answer, driver tree, revenue bridge, decision levers, and run-rate read
-- executive insight layers: `WHAT`, `WHY`, `SO WHAT`, and `NOW WHAT`
-- contribution analysis across detected dimensions
-- native self-contained SVG chart formats selected from returned data shape:
-  line chart, combo bar+line chart, pie chart, donut chart, scatter plot, and map chart
-- cross-dimension pockets such as `Province x Model`, `Region x Model`, or any dimension pair returned by the query
-- risk/opportunity watch based on returned operational drivers such as margin, discount, inventory, marketing, and market share
-- multi-semantic dataset blocks that choose chart/layout from the returned data shape instead of a fixed template
-- chart governance rules closer to Power BI reporting practice:
-  line for time series, ranked bar for larger category sets, donut only for small part-to-whole mixes, heatmap for cross-dimension pockets, scatter only for sufficient numeric observations, and map only for true geography fields
-- next-best business questions for CEO drill-down
-- question, workspace, semantic model, and DAX query context
+Raw rows stay available in `structuredContent.rows` for audit/debug; multi-semantic runs also expose `structuredContent.datasets` and `structuredContent.datasetProfiles`.
 
-Raw returned rows remain available in MCP `structuredContent.rows` for audit/debug. Multi-semantic runs also expose `structuredContent.datasets` and `structuredContent.datasetProfiles` so agents can inspect why a specific dashboard block was chosen. The HTML report is designed as a decision brief rather than a raw data table.
-
-Files are written to `POWERBI_REPORT_OUTPUT_DIR` when set, then `POWERBI_DASHBOARD_OUTPUT_DIR` for compatibility, otherwise `./powerbi-report-output` from the MCP process working directory.
+Files are written to `POWERBI_REPORT_OUTPUT_DIR`, then `POWERBI_DASHBOARD_OUTPUT_DIR` (compatibility), otherwise `./powerbi-report-output` from the MCP process's working directory.
 
 ## Environment
 
-Copy `.env.example` for local shell usage:
-
 ```bash
 cp .env.example .env
-```
-
-Then export values before running:
-
-```bash
-set -a
-source .env
-set +a
+set -a; source .env; set +a
 npm run dev
 ```
 
 ## Notes
 
-- The Microsoft Modeling MCP bridge uses `npx -y @microsoft/powerbi-modeling-mcp@latest --start` by default. Override with `POWERBI_MODELING_MCP_COMMAND` and `POWERBI_MODELING_MCP_ARGS` if you have a signed local binary.
-- Local verification notes are in [`docs/verification.md`](docs/verification.md).
+- The Microsoft Modeling MCP bridge defaults to `npx -y @microsoft/powerbi-modeling-mcp@latest --start`. Override with `POWERBI_MODELING_MCP_COMMAND` / `POWERBI_MODELING_MCP_ARGS` for a signed local binary.
+- Local verification notes: [`docs/verification.md`](docs/verification.md).
