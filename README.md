@@ -16,7 +16,11 @@ Repo này bọc quanh [`powerbi-modeling-mcp`](https://github.com/microsoft/powe
 
 ## Cài đặt nhanh cho Claude Desktop
 
-Yêu cầu có sẵn `git`, `node` (>= 18), và `npm` (>= 9) trên `PATH`. Các script cài đặt sẽ cài production dependencies, dùng bản build sẵn `dist/server.js`, ghi file `.env`, và merge server vào cấu hình `mcpServers` của Claude Desktop. **Đóng hẳn Claude Desktop (Quit từ system tray, không chỉ đóng cửa sổ) trước khi chạy các lệnh dưới đây** — nếu không Claude có thể ghi đè lại config trong lúc installer đang chỉnh sửa.
+> **Khuyến nghị — cách nhanh nhất theo từng hệ điều hành:**
+> - **Windows:** tải và double-click [`install.bat`](https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/install.bat), nhập tên workspace khi được hỏi — không cần mở PowerShell hay gõ lệnh. Xem chi tiết ở mục "Windows (1 click)" ngay bên dưới.
+> - **macOS:** chạy lệnh `curl` một dòng ở mục "macOS" ngay bên dưới.
+
+Yêu cầu có sẵn `git`, `node` (>= 18), và `npm` (>= 9) trên `PATH` (bản Windows 1-click tự cài Git/Node qua `winget` nếu thiếu). Các script cài đặt sẽ cài production dependencies, dùng bản build sẵn `dist/server.js`, ghi file `.env`, và merge server vào cấu hình `mcpServers` của Claude Desktop. **Đóng hẳn Claude Desktop (Quit từ system tray, không chỉ đóng cửa sổ) trước khi chạy các lệnh dưới đây** — nếu không Claude có thể ghi đè lại config trong lúc installer đang chỉnh sửa.
 
 ### macOS
 
