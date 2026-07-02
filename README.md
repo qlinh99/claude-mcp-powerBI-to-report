@@ -26,9 +26,18 @@ curl -fsSL https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-repor
 
 Chưa có Git/Node? Cài Homebrew rồi `brew install git node` trước, sau đó chạy lệnh trên.
 
+### Windows (1 click — khuyến nghị cho người dùng phổ thông)
+
+1. Tải file [`scripts/install.bat`](https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/install.bat) về máy (click chuột phải vào link → "Save link as...").
+2. Đóng hẳn Claude Desktop (Quit từ system tray).
+3. Double-click file `install.bat` vừa tải.
+4. Nhập tên workspace Power BI/Fabric khi được hỏi, nhấn Enter.
+
+Script tự tải bản installer mới nhất, tự cài Git/Node.js qua `winget` nếu máy chưa có, clone repo về `%USERPROFILE%\mcp-powerBI-to-report`, cài dependencies, và ghi cấu hình vào Claude Desktop — không cần mở PowerShell hay gõ lệnh thủ công. Cửa sổ console sẽ giữ nguyên sau khi chạy xong để bạn đọc kết quả.
+
 ### Windows (PowerShell)
 
-Cách cài khuyến nghị (một lệnh) — tự clone/cập nhật repo, cài dependencies, và cấu hình Claude Desktop:
+Dành cho ai muốn kiểm soát chi tiết hơn hoặc không tải được file `.bat` trực tiếp. Một lệnh — tự clone/cập nhật repo, cài dependencies, và cấu hình Claude Desktop:
 
 ```powershell
 iwr -UseBasicParsing "https://raw.githubusercontent.com/qlinh99/claude-mcp-powerBI-to-report/main/scripts/install-windows.ps1" -OutFile "$env:TEMP\install-powerbi-mcp.ps1"
