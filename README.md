@@ -53,13 +53,17 @@ The macOS setup resolves `node` with `command -v node` and writes that absolute 
 if ! command -v brew >/dev/null 2>&1; then /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; fi; eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null || true)"; brew install git node; curl -fsSL https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/setup-claude-desktop.sh | bash -s -- --workspace GSM_MCP_POC_WORKSPACE
 ```
 
-### Windows PowerShell - standard setup
+### Windows PowerShell - recommended one-command setup
+
+Use this command first on company Windows devices. It uses `node`, `npm`, and `git` already available on `PATH`, validates Node.js 18+/npm 9+, clones or fast-forwards the repo, installs dependencies, writes Claude Desktop config, and exits with a clear error if the repo has local changes.
 
 ```powershell
 $ErrorActionPreference="Stop"; Set-Location $HOME; Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "Claude*" } | Stop-Process -Force; if ($env:NODE_PORTABLE_HOME -and (Test-Path (Join-Path $env:NODE_PORTABLE_HOME "node.exe"))) { $env:Path="$env:NODE_PORTABLE_HOME;$env:Path" }; $dir=Join-Path $HOME "mcp-powerBI-to-report"; $nodeCmd=Get-Command node.exe -ErrorAction SilentlyContinue; if (-not $nodeCmd) { $nodeCmd=Get-Command node -ErrorAction SilentlyContinue }; if (-not $nodeCmd) { throw "Node.js 18+ is required but node was not found on PATH" }; $npmCmd=Get-Command npm.cmd -ErrorAction SilentlyContinue; if (-not $npmCmd) { $npmCmd=Get-Command npm -ErrorAction SilentlyContinue }; if (-not $npmCmd) { throw "npm 9+ is required but npm was not found on PATH" }; $gitCmd=Get-Command git.exe -ErrorAction SilentlyContinue; if (-not $gitCmd) { $gitCmd=Get-Command git -ErrorAction SilentlyContinue }; if (-not $gitCmd) { throw "Git is required but git was not found on PATH" }; $nodeExe=$nodeCmd.Source; $nodeVersionText=(& $nodeExe -v).Trim(); if ($LASTEXITCODE -ne 0) { throw "node failed" }; $nodeMajor=[int]($nodeVersionText.TrimStart([char]"v").Split(".")[0]); if ($nodeMajor -lt 18) { throw "Node.js 18 or newer is required. Current: $nodeVersionText at $nodeExe" }; $npmVersionText=(& $npmCmd.Source -v).Trim(); if ($LASTEXITCODE -ne 0) { throw "npm failed" }; $npmMajor=[int]($npmVersionText.Split(".")[0]); if ($npmMajor -lt 9) { throw "npm 9 or newer is required. Current: $npmVersionText" }; Write-Host "Using Node: $nodeExe ($nodeVersionText)"; Write-Host "Using npm: $($npmCmd.Source) ($npmVersionText)"; if (-not (Test-Path "$dir\.git")) { git clone "https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git" $dir; if ($LASTEXITCODE -ne 0) { throw "git clone failed" } } else { Set-Location $dir; git pull --ff-only; if ($LASTEXITCODE -ne 0) { throw "git pull failed. Resolve local changes before continuing." } }; Set-Location $dir; & $npmCmd.Source install --omit=dev --include=optional; if ($LASTEXITCODE -ne 0) { throw "npm install failed" }; powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup-claude-desktop.ps1" -Workspace "GSM_MCP_POC_WORKSPACE" -NodeCommand $nodeExe -SkipInstall; if ($LASTEXITCODE -ne 0) { throw "Claude Desktop setup failed" }; Write-Host "Installation completed successfully. Start Claude Desktop again."
 ```
 
-The Windows setup uses a compatible Node.js installation already available on `PATH`. It requires Node.js 18 or newer and npm 9 or newer. The setup script writes the resolved absolute `node.exe` path into `claude_desktop_config.json`, so Claude Desktop uses the same Node runtime later.
+This is the normal Windows setup command. Do not use the corporate npm command below unless npm fails because of corporate certificate/proxy behavior.
+
+The setup script writes the resolved absolute `node.exe` path into `claude_desktop_config.json`, so Claude Desktop uses the same Node runtime later.
 
 Portable Node.js is optional. If a device needs it, set `NODE_PORTABLE_HOME` first, then run the standard command:
 
@@ -79,15 +83,13 @@ Close Claude Desktop completely before running setup. Use Quit from the system t
 
 The Windows setup script also stops running Claude Desktop processes before writing config, backs up the existing config, recovers from the latest valid backup if the current config is invalid JSON, writes through a temp file, then validates JSON before and after replacing the live config.
 
-### Windows PowerShell - installer script for company devices
+### Windows PowerShell - optional corporate npm mode
+
+Use this only when the normal command fails because the company network requires temporary npm SSL compatibility. It still requires `node`, `npm`, and `git` on `PATH`.
 
 ```powershell
 $dir="$HOME\mcp-powerBI-to-report"; if (!(Test-Path "$dir\.git")) { git clone https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git $dir }; cd $dir; powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -Workspace "GSM_MCP_POC_WORKSPACE" -CorporateNpm -Clean
 ```
-
-This command does not download scripts from `raw.githubusercontent.com`; it clones the repo when needed, then runs the installer from the local repo. The installer itself handles repo update and dirty-worktree checks. Use it when the active `node` and `npm` on PATH are already Node.js 18+/npm 9+.
-
-If you prepend a portable Node.js folder before running this installer, `install-windows.ps1` preserves the current process PATH when it refreshes Machine/User PATH entries after optional `winget` installs.
 
 `-CorporateNpm` is a temporary compatibility mode for approved test environments. It only sets `npm_config_strict_ssl=false` inside the installer process, cleans npm cache, then removes that override in `finally`. It does not bypass gateway blocks such as `403 MediaTypeBlocked`. The preferred enterprise path is still:
 
@@ -96,34 +98,20 @@ If you prepend a portable Node.js folder before running this installer, `install
 - gateway whitelist
 - approved offline provisioning of the Microsoft binary
 
-### Windows PowerShell - installer shortcut
-
-Use this shorter installer path when npm and GitHub downloads are not blocked by corporate SSL/media policy and the active `node`, `npm`, and `git` on PATH are already valid.
-
-```powershell
-$dir="$HOME\mcp-powerBI-to-report"; if (!(Test-Path "$dir\.git")) { git clone https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git $dir }; cd $dir; powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -Workspace "GSM_MCP_POC_WORKSPACE"
-```
-
-This path fails fast if:
-
-- `node` is older than 18
-- `npm` is older than 9
-- the local repo already has uncommitted changes
-
-### Windows PowerShell - raw GitHub download
-
-Use this only when `raw.githubusercontent.com` is allowed.
-
-```powershell
-iwr -UseBasicParsing "https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/install-windows.ps1" -OutFile "$env:TEMP\install-powerbi-mcp.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\install-powerbi-mcp.ps1" -Workspace "GSM_MCP_POC_WORKSPACE"
-```
-
-### Windows PowerShell - explicit local repo command
+### Windows PowerShell - existing dirty repo
 
 Use this if the repo is already cloned, the working tree is dirty, or you want to skip `git pull`.
 
 ```powershell
 $ErrorActionPreference="Stop"; Set-Location $HOME; if ($env:NODE_PORTABLE_HOME -and (Test-Path (Join-Path $env:NODE_PORTABLE_HOME "node.exe"))) { $env:Path="$env:NODE_PORTABLE_HOME;$env:Path" }; $dir=Join-Path $HOME "mcp-powerBI-to-report"; if (-not (Test-Path "$dir\.git")) { throw "Repository not found: $dir" }; $nodeCmd=Get-Command node.exe -ErrorAction SilentlyContinue; if (-not $nodeCmd) { $nodeCmd=Get-Command node -ErrorAction SilentlyContinue }; if (-not $nodeCmd) { throw "Node.js 18+ is required but node was not found on PATH" }; $npmCmd=Get-Command npm.cmd -ErrorAction SilentlyContinue; if (-not $npmCmd) { $npmCmd=Get-Command npm -ErrorAction SilentlyContinue }; if (-not $npmCmd) { throw "npm 9+ is required but npm was not found on PATH" }; $nodeExe=$nodeCmd.Source; $nodeVersionText=(& $nodeExe -v).Trim(); $nodeMajor=[int]($nodeVersionText.TrimStart([char]"v").Split(".")[0]); if ($nodeMajor -lt 18) { throw "Node.js 18 or newer is required. Current: $nodeVersionText at $nodeExe" }; $npmVersionText=(& $npmCmd.Source -v).Trim(); $npmMajor=[int]($npmVersionText.Split(".")[0]); if ($npmMajor -lt 9) { throw "npm 9 or newer is required. Current: $npmVersionText" }; Set-Location $dir; & $npmCmd.Source install --omit=dev --include=optional; if ($LASTEXITCODE -ne 0) { throw "npm install failed" }; powershell -ExecutionPolicy Bypass -File scripts\setup-claude-desktop.ps1 -Workspace "GSM_MCP_POC_WORKSPACE" -NodeCommand $nodeExe -SkipInstall; if ($LASTEXITCODE -ne 0) { throw "Claude Desktop setup failed" }; Write-Host "Installation completed successfully. Start Claude Desktop again."
+```
+
+### Windows PowerShell - raw GitHub download
+
+Use this only when `raw.githubusercontent.com` is allowed and you want to run only the installer script directly.
+
+```powershell
+iwr -UseBasicParsing "https://raw.githubusercontent.com/nguyenanhducdeveloper86/mcp-powerBI-to-report/main/scripts/install-windows.ps1" -OutFile "$env:TEMP\install-powerbi-mcp.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\install-powerbi-mcp.ps1" -Workspace "GSM_MCP_POC_WORKSPACE"
 ```
 
 If company policy blocks Homebrew, `winget`, or app installation, ask IT to install:
