@@ -5,6 +5,7 @@ param(
   [string]$ReportDir = $env:POWERBI_REPORT_OUTPUT_DIR,
   [string]$Config = "",
   [string]$Name = "mcp-powerBI-to-report",
+  [string]$NodeCommand = "",
   [string]$ModelingCommand = $env:POWERBI_MODELING_MCP_COMMAND,
   [string]$ModelingArgs = $env:POWERBI_MODELING_MCP_ARGS,
   [switch]$SkipInstall,
@@ -20,30 +21,51 @@ function Require-Command($Name) {
   }
 }
 
-function Resolve-CommandSource($Name) {
-  $command = Get-Command $Name -ErrorAction SilentlyContinue
-  if (-not $command) {
-    throw "Missing required command: $Name"
+function Resolve-NodeCommand($RequestedCommand) {
+  if ($RequestedCommand) {
+    if (-not (Test-Path $RequestedCommand) -and -not (Get-Command $RequestedCommand -ErrorAction SilentlyContinue)) {
+      throw "Configured Node command was not found: $RequestedCommand"
+    }
+    if (Test-Path $RequestedCommand) {
+      return $RequestedCommand
+    }
+    return (Get-Command $RequestedCommand -ErrorAction Stop).Source
   }
-  if ($command.Source) {
-    return $command.Source
+
+  $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+  if (-not $nodeCommand) {
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
   }
-  return $command.Path
+  if (-not $nodeCommand) {
+    throw "Node.js 18+ is required but node was not found on PATH"
+  }
+  return $nodeCommand.Source
 }
 
-function Assert-NodeAndNpmVersion {
-  $nodeVersionText = (& node -v).Trim()
+function Resolve-NpmCommand {
+  $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+  if (-not $npmCommand) {
+    $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+  }
+  if (-not $npmCommand) {
+    throw "npm 9+ is required but npm was not found on PATH"
+  }
+  return $npmCommand.Source
+}
+
+function Assert-NodeAndNpmVersion($ResolvedNodeCommand, $ResolvedNpmCommand) {
+  $nodeVersionText = (& $ResolvedNodeCommand -v).Trim()
   if ($LASTEXITCODE -ne 0) { throw "node failed." }
   $nodeMajor = [int](($nodeVersionText -replace '^v', '').Split('.')[0])
   if ($nodeMajor -lt 18) {
-    throw "Node.js 18 or newer is required. Current: $nodeVersionText"
+    throw "Node.js 18 or newer is required. Current: $nodeVersionText at $ResolvedNodeCommand"
   }
 
-  $npmVersionText = (& npm -v).Trim()
+  $npmVersionText = (& $ResolvedNpmCommand -v).Trim()
   if ($LASTEXITCODE -ne 0) { throw "npm failed." }
   $npmMajor = [int]($npmVersionText.Split('.')[0])
   if ($npmMajor -lt 9) {
-    throw "npm 9 or newer is required. Current: $npmVersionText"
+    throw "npm 9 or newer is required. Current: $npmVersionText at $ResolvedNpmCommand"
   }
 }
 
@@ -186,10 +208,9 @@ function Resolve-ModelingCommand($RepoDir, $RequestedCommand) {
   throw "Cannot find a usable Modeling MCP command. Tried native .exe, local .cmd shim, and npx."
 }
 
-Require-Command node
-Require-Command npm
-Assert-NodeAndNpmVersion
-$NodeCommand = Resolve-CommandSource "node"
+$NodeCommand = Resolve-NodeCommand $NodeCommand
+$NpmCommand = Resolve-NpmCommand
+Assert-NodeAndNpmVersion $NodeCommand $NpmCommand
 
 $RepoDir = Split-Path -Parent $PSScriptRoot
 if (-not $Workspaces -and $Workspace) {
@@ -203,7 +224,7 @@ if (-not $ModelingArgs) { $ModelingArgs = "--start --authmode=interactive" }
 Set-Location $RepoDir
 
 if (-not $SkipInstall -and -not $DryRun) {
-  npm install --omit=dev --include=optional
+  & $NpmCommand install --omit=dev --include=optional
   if ($LASTEXITCODE -ne 0) {
     throw "npm install failed."
   }
@@ -224,6 +245,7 @@ if ($DryRun) {
     Repo = $RepoDir
     ClaudeConfig = $ConfigPath
     NodeCommand = $NodeCommand
+    NpmCommand = $NpmCommand
     ServerJs = $ServerJs
     ModelingCommand = $ModelingCommand
     ModelingArgs = $ModelingArgs
@@ -294,4 +316,4 @@ if (-not (Test-Path $envPath)) {
 
 Write-Host "Claude Desktop config updated: $ConfigPath"
 Write-Host "Local env written: $envPath"
-Write-Host "Restart Claude Desktop completely, then use MCP server: $Name"
+Write-Host "Start Claude Desktop again, then use MCP server: $Name"

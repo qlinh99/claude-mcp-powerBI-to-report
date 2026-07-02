@@ -13,7 +13,18 @@ function Command-Exists($Name) {
   return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
-function Assert-NodeAndNpmVersion {
+function Resolve-NpmCommand {
+  $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+  if (-not $npmCommand) {
+    $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+  }
+  if (-not $npmCommand) {
+    throw "npm is not available. Install Node.js LTS or ask IT to install Node.js LTS, then re-run this command."
+  }
+  return $npmCommand.Source
+}
+
+function Assert-NodeAndNpmVersion($NpmCommand) {
   $nodeVersionText = (& node -v).Trim()
   if ($LASTEXITCODE -ne 0) { throw "node failed." }
   $nodeMajor = [int](($nodeVersionText -replace '^v', '').Split('.')[0])
@@ -21,11 +32,11 @@ function Assert-NodeAndNpmVersion {
     throw "Node.js 18 or newer is required. Current: $nodeVersionText"
   }
 
-  $npmVersionText = (& npm -v).Trim()
+  $npmVersionText = (& $NpmCommand -v).Trim()
   if ($LASTEXITCODE -ne 0) { throw "npm failed." }
   $npmMajor = [int]($npmVersionText.Split('.')[0])
   if ($npmMajor -lt 9) {
-    throw "npm 9 or newer is required. Current: $npmVersionText"
+    throw "npm 9 or newer is required. Current: $npmVersionText at $NpmCommand"
   }
 }
 
@@ -110,7 +121,8 @@ if (-not (Command-Exists git)) {
 if (-not (Command-Exists npm)) {
   throw "npm is not available. Install Node.js LTS or ask IT to install Node.js LTS, then re-run this command."
 }
-Assert-NodeAndNpmVersion
+$NpmCommand = Resolve-NpmCommand
+Assert-NodeAndNpmVersion $NpmCommand
 
 if (!(Test-Path "$RepoDir\.git")) {
   git clone https://github.com/nguyenanhducdeveloper86/mcp-powerBI-to-report.git $RepoDir
@@ -147,13 +159,13 @@ if ($Clean -or $CorporateNpm) {
 try {
   if ($CorporateNpm) {
     $env:npm_config_strict_ssl = "false"
-    npm cache clean --force
+    & $NpmCommand cache clean --force
     if ($LASTEXITCODE -ne 0) {
       throw "npm cache clean failed."
     }
   }
 
-  npm install --omit=dev --include=optional
+  & $NpmCommand install --omit=dev --include=optional
   if ($LASTEXITCODE -ne 0) {
     throw "npm install failed."
   }
@@ -161,7 +173,7 @@ try {
   $nativeModelingBinary = Join-Path $RepoDir "node_modules\@microsoft\powerbi-modeling-mcp-win32-x64\dist\powerbi-modeling-mcp.exe"
   if (-not (Test-Path $nativeModelingBinary)) {
     Write-Host "Microsoft Modeling MCP native Windows binary is missing. Trying explicit native package install..."
-    npm install --omit=dev --include=optional --no-save "@microsoft/powerbi-modeling-mcp-win32-x64@$ModelingMcpVersion"
+    & $NpmCommand install --omit=dev --include=optional --no-save "@microsoft/powerbi-modeling-mcp-win32-x64@$ModelingMcpVersion"
     if ($LASTEXITCODE -ne 0) {
       Write-Host "Explicit native package install failed. Will try local .cmd shim or npx fallback."
     }
@@ -174,9 +186,14 @@ finally {
 }
 
 $resolvedModeling = Resolve-LocalModelingCommand $RepoDir
+$resolvedNode = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $resolvedNode) {
+  $resolvedNode = Get-Command node -ErrorAction Stop
+}
 
 & powershell -ExecutionPolicy Bypass -File .\scripts\setup-claude-desktop.ps1 `
   -Workspace $Workspace `
+  -NodeCommand $resolvedNode.Source `
   -ModelingCommand $resolvedModeling.Command `
   -ModelingArgs $resolvedModeling.Args `
   -SkipInstall
@@ -195,5 +212,5 @@ if (-not (Test-Path $envPath)) {
 
 Write-Host ""
 Write-Host "Done. Modeling command source: $($resolvedModeling.Source)"
-Write-Host "Restart Claude Desktop completely, then ask Claude:"
+Write-Host "Start Claude Desktop again, then ask Claude:"
 Write-Host "Use mcp-powerBI-to-report to diagnose the local Power BI MCP setup."
