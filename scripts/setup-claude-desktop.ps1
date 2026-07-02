@@ -90,15 +90,41 @@ function Get-ClaudeConfigPath {
 }
 
 function Stop-ClaudeDesktop {
-  $processes = @()
+  $currentPid = $PID
+  $candidates = @()
   foreach ($name in @("Claude", "claude")) {
-    $processes += @(Get-Process -Name $name -ErrorAction SilentlyContinue)
+    $candidates += @(Get-Process -Name $name -ErrorAction SilentlyContinue)
   }
-  $processes = @($processes | Sort-Object -Property Id -Unique)
-  if ($processes.Count -gt 0) {
-    Write-Host "Stopping Claude Desktop before editing config..."
-    $processes | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 500
+  # Exclude the current process and anything that isn't actually the Claude
+  # Desktop app (e.g. the Claude Code CLI / VS Code extension binary is also
+  # named "claude" and must never be killed by this installer).
+  $targets = @(
+    $candidates |
+      Where-Object {
+        $_.Id -ne $currentPid -and
+        $_.Path -and
+        $_.Path -notmatch '(?i)extensions' -and
+        $_.Path -notmatch '(?i)claude-code'
+      } |
+      Sort-Object -Property Id -Unique
+  )
+  if ($targets.Count -eq 0) {
+    return
+  }
+
+  Write-Host "Stopping Claude Desktop before editing config..."
+  $targets | Stop-Process -Force -ErrorAction SilentlyContinue
+
+  $ids = $targets | Select-Object -ExpandProperty Id
+  $deadline = (Get-Date).AddSeconds(10)
+  $stillRunning = @()
+  do {
+    Start-Sleep -Milliseconds 250
+    $stillRunning = @($ids | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+  } while ($stillRunning.Count -gt 0 -and (Get-Date) -lt $deadline)
+
+  if ($stillRunning.Count -gt 0) {
+    Write-Host "Warning: Claude Desktop did not fully exit (PID: $($stillRunning.Id -join ', ')). It may overwrite the config this script is about to write. Close it manually and re-run if the config does not stick."
   }
 }
 

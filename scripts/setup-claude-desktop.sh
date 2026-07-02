@@ -269,6 +269,57 @@ native_modeling_binary() {
   printf '%s' "$repo_dir/node_modules/$package/dist/$binary"
 }
 
+stop_claude_desktop() {
+  case "$os_id" in
+    macos)
+      if pgrep -x "Claude" >/dev/null 2>&1; then
+        echo "Stopping Claude Desktop before editing config..."
+        osascript -e 'tell application "Claude" to quit' >/dev/null 2>&1 || true
+        for _ in $(seq 1 20); do
+          pgrep -x "Claude" >/dev/null 2>&1 || break
+          sleep 0.5
+        done
+        if pgrep -x "Claude" >/dev/null 2>&1; then
+          pkill -x "Claude" >/dev/null 2>&1 || true
+          sleep 1
+        fi
+        if pgrep -x "Claude" >/dev/null 2>&1; then
+          echo "Warning: Claude Desktop is still running and may overwrite the config this script is about to write. Quit it manually and re-run if the config does not stick." >&2
+        fi
+      fi
+      ;;
+    windows)
+      if command -v powershell.exe >/dev/null 2>&1; then
+        local ps1_tmp
+        ps1_tmp="$(mktemp "${TMPDIR:-/tmp}/stop-claude-XXXXXX.ps1")"
+        # Only stop processes that actually look like the Claude Desktop app.
+        # The Claude Code CLI / VS Code extension binary is also named
+        # "claude" and must never be killed by this installer.
+        cat > "$ps1_tmp" <<'PS1EOF'
+$targets = Get-Process -Name Claude -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -and $_.Path -notmatch '(?i)extensions' -and $_.Path -notmatch '(?i)claude-code' }
+if ($targets) {
+  Write-Host "Stopping Claude Desktop before editing config..."
+  $targets | Stop-Process -Force -ErrorAction SilentlyContinue
+  $ids = $targets | Select-Object -ExpandProperty Id
+  $deadline = (Get-Date).AddSeconds(10)
+  $stillRunning = @()
+  do {
+    Start-Sleep -Milliseconds 250
+    $stillRunning = @($ids | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+  } while ($stillRunning.Count -gt 0 -and (Get-Date) -lt $deadline)
+  if ($stillRunning.Count -gt 0) {
+    Write-Host "Warning: Claude Desktop did not fully exit. It may overwrite the config this script is about to write. Close it manually and re-run if the config does not stick."
+  }
+}
+PS1EOF
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(to_claude_path "$ps1_tmp")" || true
+        rm -f "$ps1_tmp"
+      fi
+      ;;
+  esac
+}
+
 require_command node
 require_command npm
 assert_node_and_npm_version
@@ -359,6 +410,8 @@ if [[ ! -f "$server_js" ]]; then
 fi
 mkdir -p "$report_dir_unix"
 mkdir -p "$(dirname "$config_path_unix")"
+
+stop_claude_desktop
 
 if [[ -f "$config_path_unix" ]]; then
   cp "$config_path_unix" "$config_path_unix.bak.$(date +%Y%m%d%H%M%S)"
